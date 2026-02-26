@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, ForeignKey, TIMESTAMP
+from sqlalchemy import Column, String, Text, ForeignKey, TIMESTAMP, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from database import Base
@@ -10,6 +10,7 @@ class User(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
+    is_remember = Column(Boolean, nullable=False, default=False, server_default='false')
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 
