@@ -1,4 +1,4 @@
-# AI Content Generator Platform
+# NT208 PROJECT - GROUP 4: AI Content Generator Platform
 
 ## 📌 Giới thiệu dự án
 
