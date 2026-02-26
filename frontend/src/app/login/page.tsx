@@ -14,6 +14,15 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [rememberMe, setRememberMe] = useState(false); // State lưu trạng thái checkbox
 
+    // Tự động điền email nếu trước đó đã check Remember Me
+    React.useEffect(() => {
+        const savedEmail = localStorage.getItem("remembered_email");
+        if (savedEmail) {
+            setEmail(savedEmail);
+            setRememberMe(true);
+        }
+    }, []);
+
     // Xử lý sự kiện đăng nhập
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -47,9 +56,11 @@ export default function LoginPage() {
             if (rememberMe) {
                 localStorage.setItem("access_token", data.access_token);
                 localStorage.setItem("user_email", email);
+                localStorage.setItem("remembered_email", email); // Lưu lại email để điền Form cho lần sau
             } else {
                 sessionStorage.setItem("access_token", data.access_token);
                 sessionStorage.setItem("user_email", email);
+                localStorage.removeItem("remembered_email"); // Xóa email nếu không tick
             }
 
             // Chuyển hướng
