@@ -1,0 +1,10 @@
+tasks/
+/node_modules
+/.next/
+/out/
+.env
+.env.local
+.venv/
+__pycache__/
+*.pyc
+.agent/
