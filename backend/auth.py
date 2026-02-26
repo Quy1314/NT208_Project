@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
@@ -110,4 +111,51 @@ def login_user(user: UserLogin, db: Session = Depends(get_db)):
             "id": str(db_user.id),
             "email": db_user.email
         }
+    }
+
+# ==========================================
+# BẢO VỆ API (PROTECTED ROUTES)
+# ==========================================
+
+# Khai báo chuẩn OAuth2, token URL trỏ về API /login mà ta vừa viết ở trên
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """
+    Hàm Dependency: Dùng để chèn vào các API bắt buộc phải Đăng Nhập.
+    Nó sẽ tự động lấy Token từ Header 'Authorization: Bearer <token>', 
+    giải mã (decode) Token đó ra để lấy ID user.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Không thể xác thực thông tin (Token quá hạn hoặc sai).",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        # Giải mã Token
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+        
+    # Truy vấn DB xem user này còn tồn tại không
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None:
+        raise credentials_exception
+        
+    return user
+
+@router.get("/me")
+def read_users_me(current_user: models.User = Depends(get_current_user)):
+    """
+    API Test: Trả về thông tin của User hiện tại dựa vào Token gửi lên.
+    Ví dụ này cho thấy cách dòng Depends(get_current_user) bảo vệ API thế nào.
+    """
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "created_at": current_user.created_at
     }
