@@ -14,15 +14,6 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [rememberMe, setRememberMe] = useState(false); // State lưu trạng thái checkbox
 
-    // Tự động điền email nếu trước đó đã check Remember Me
-    React.useEffect(() => {
-        const savedEmail = localStorage.getItem("remembered_email");
-        if (savedEmail) {
-            setEmail(savedEmail);
-            setRememberMe(true);
-        }
-    }, []);
-
     // Xử lý sự kiện đăng nhập
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -56,11 +47,9 @@ export default function LoginPage() {
             if (rememberMe) {
                 localStorage.setItem("access_token", data.access_token);
                 localStorage.setItem("user_email", email);
-                localStorage.setItem("remembered_email", email);
             } else {
                 sessionStorage.setItem("access_token", data.access_token);
                 sessionStorage.setItem("user_email", email);
-                localStorage.removeItem("remembered_email");
             }
 
             // Chuyển hướng
@@ -107,7 +96,7 @@ export default function LoginPage() {
                         <p className="text-slate-500 font-medium">Log in to your account to continue creating.</p>
                     </div>
 
-                    <form onSubmit={handleLogin} className="space-y-6">
+                    <form onSubmit={handleLogin} className="space-y-6" autoComplete="off">
                         {error && (
                             <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg font-medium border border-red-100">
                                 {error}
@@ -156,12 +145,7 @@ export default function LoginPage() {
                                 type="checkbox"
                                 checked={rememberMe}
                                 onChange={(e) => {
-                                    const isChecked = e.target.checked;
-                                    setRememberMe(isChecked);
-                                    if (!isChecked) {
-                                        // Xóa ngay lập tức nếu người dùng bỏ check (tránh login ảo)
-                                        localStorage.removeItem("remembered_email");
-                                    }
+                                    setRememberMe(e.target.checked);
                                 }}
                                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded cursor-pointer"
                             />
