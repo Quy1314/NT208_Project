@@ -4,6 +4,16 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from database import get_db
 import models
+import os
+from datetime import datetime, timedelta
+from jose import jwt, JWTError
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "secret")
+ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
 # Tạo Router cho Auth
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -45,5 +55,45 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
         "user": {
             "id": str(new_user.id),
             "email": new_user.email
+        }
+    }
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+@router.post("/login")
+def login_user(user: UserLogin, db: Session = Depends(get_db)):
+    db_user = db.query(models.User).filter(models.User.email == user.email).first()
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tài khoản hoặc mật khẩu không đúng."
+        )
+    
+    if not verify_password(user.password, db_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Tài khoản hoặc mật khẩu không đúng."
+        )
+
+    # Generate JWT Token
+    access_token = create_access_token(data={"sub": str(db_user.id)})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(db_user.id),
+            "email": db_user.email
         }
     }
