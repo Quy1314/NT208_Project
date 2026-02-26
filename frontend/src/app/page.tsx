@@ -32,13 +32,15 @@ export default function DashboardPage() {
   ];
 
   useEffect(() => {
-    // Auth check
-    const token = localStorage.getItem("access_token");
+    // Auth check (Ưu tiên localStorage, nếu không có thì tìm trong sessionStorage)
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     if (!token) {
-      router.push("/login");
+      router.push("/login"); // Nếu không có token nào, đá văng ra login
       return;
     }
-    setUserEmail(localStorage.getItem("user_email") || "User");
+
+    const email = localStorage.getItem("user_email") || sessionStorage.getItem("user_email") || "User";
+    setUserEmail(email);
 
     // Handle click outside for dropdown
     const handleClickOutside = (event: MouseEvent) => {
@@ -51,9 +53,15 @@ export default function DashboardPage() {
   }, [router]);
 
   const handleLogout = () => {
+    // Quét dọn sạch sẽ tất cả session & local storage (trừ cái remembered_email)
     localStorage.removeItem("access_token");
     localStorage.removeItem("user_email");
-    router.push("/login");
+    sessionStorage.removeItem("access_token");
+    sessionStorage.removeItem("user_email");
+
+    // Dùng window.location.href thay vì router.push để XÓA SẠCH CACHE của NextJS Router
+    // Điều này đảm bảo trang /login được load mới hoàn toàn, input form không bị dính chữ cũ
+    window.location.href = "/login";
   };
 
   return (
@@ -114,7 +122,7 @@ export default function DashboardPage() {
             </div>
             <div className="hidden md:flex items-center gap-4">
               {/* Breadcrumbs / Top Actions can go here */}
-              <span className="text-sm font-semibold text-slate-800 bg-slate-100 px-3 py-1.5 rounded-full">Orbita GPT Plus</span>
+              <span className="text-sm font-semibold text-slate-800 bg-slate-100 px-3 py-1.5 rounded-full">Test  GPT Plus</span>
             </div>
 
             {/* User Menu Dropdown */}

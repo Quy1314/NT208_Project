@@ -49,17 +49,18 @@ export default function LoginPage() {
                 throw new Error(data.detail || "Login failed");
             }
 
-            // Lưu JWT Token vào LocalStorage
-            localStorage.setItem("access_token", data.access_token);
-
-            // Xử lý Remember Me (Lưu email nếu check, xóa nếu uncheck)
+            // Lưu JWT Token dựa theo trạng thái Remember Me
+            // Nếu có Remember Me -> Lưu localStorage (sống sót khi đóng tab)
+            // Nếu không có -> Lưu sessionStorage (mất đi khi đóng tab)
             if (rememberMe) {
+                localStorage.setItem("access_token", data.access_token);
+                localStorage.setItem("user_email", email);
                 localStorage.setItem("remembered_email", email);
             } else {
+                sessionStorage.setItem("access_token", data.access_token);
+                sessionStorage.setItem("user_email", email);
                 localStorage.removeItem("remembered_email");
             }
-
-            localStorage.setItem("user_email", email);
 
             // Chuyển hướng
             router.push("/");
