@@ -9,30 +9,36 @@ from datetime import datetime, timedelta
 from jose import jwt, JWTError
 from dotenv import load_dotenv
 
+# Tải các biến môi trường từ file .env
 load_dotenv()
 
+# Lấy các cấu hình bảo mật từ biến môi trường (hoặc dùng mặc định rỗng nếu không có)
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "secret")
 ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
-# Tạo Router cho Auth
+# Tạo Router cho Auth (Nhóm các API chung prefix để gọi trong file main.py)
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
-# Cấu hình Passlib để sử dụng thuật toán bcrypt mã hóa mật khẩu
+# Cấu hình Passlib để sử dụng thuật toán bcrypt mã hóa mật khẩu, tránh bị lộ khi bị hack database
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Schema (Khuôn mẫu) để nhận dữ liệu JSON từ Frontend gửi lên
+# Schema (Khuôn mẫu) báo hiệu cho FastAPI biết format dữ liệu JSON mà Frontend sẽ gửi lên
 class UserRegister(BaseModel):
     email: str
     password: str
 
-# Hàm phụ trợ hash mật khẩu
+# Hàm phụ trợ dùng để băm (hash) mật khẩu gốc thành chuỗi bảo mật an toàn
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 @router.post("/register")
 def register_user(user: UserRegister, db: Session = Depends(get_db)):
-    # 1. Kiểm tra xem email này đã đăng ký chưa
+    """
+    API đăng ký người dùng mới.
+    Quy trình: Kiểm tra email -> Băm mật khẩu -> Lưu xuống CSDL.
+    """
+    # 1. Tra cứu xem email này đã tồn tại trong CSDL chưa
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if db_user:
         raise HTTPException(
@@ -40,7 +46,7 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
             detail="Email này đã được đăng ký."
         )
     
-    # 2. Băm(Hash) mật khẩu thay vì lưu plain text
+    # 2. Băm(Hash) mật khẩu thay vì lưu plain text (Rất quan trọng về an toàn)
     hashed_password = get_password_hash(user.password)
     
     # 3. Khởi tạo đối tượng User và lưu vào Database (PostgreSQL)
@@ -49,7 +55,7 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user) # load lại để lấy ID do auto-generate sinh ra
     
-    # 4. Trả kết quả JSON về 
+    # 4. Trả kết quả JSON về báo hiệu đăng ký thành công
     return {
         "message": "Đăng ký tài khoản thành công!",
         "user": {
@@ -58,22 +64,30 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
         }
     }
 
+# Schema Data dùng riêng cho việc Login (tránh nhầm lẫn với Register)
 class UserLogin(BaseModel):
     email: str
     password: str
 
+# Hàm kiểm chứng xem password nhập vào có khớp với mã băm lấy trong DB không
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
+# Hàm sinh JWT Token có gắn kèm thông tin cơ bản và thời gian hết hạn
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
+    # Ký kết chuỗi Token bằng thuật toán HS256 và Secret Key lưu trong biến môi trường
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 @router.post("/login")
 def login_user(user: UserLogin, db: Session = Depends(get_db)):
+    """
+    API xử lý Đăng nhập, nhận Email + Mật khẩu, trả về một JWT Token (Access Token).
+    Frontend sẽ lưu Token này lại và đính kèm vào phần Header của các request kế tiếp để hệ thống biết User là ai.
+    """
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     if not db_user:
         raise HTTPException(
@@ -87,7 +101,7 @@ def login_user(user: UserLogin, db: Session = Depends(get_db)):
             detail="Tài khoản hoặc mật khẩu không đúng."
         )
 
-    # Generate JWT Token
+    # Sinh (Generate) JWT Token với mã định danh (subject 'sub') là ID của người dùng
     access_token = create_access_token(data={"sub": str(db_user.id)})
     return {
         "access_token": access_token,
