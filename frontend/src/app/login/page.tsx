@@ -34,6 +34,7 @@ export default function LoginPage() {
             const formData = new URLSearchParams();
             formData.append("username", email); // Lưu ý: OAuth2 bắt buộc key phải tên là "username"
             formData.append("password", password);
+            formData.append("is_remember", rememberMe.toString()); // Bắn luôn thông số này chọc xuống Database
 
             // Gửi HTTP POST request sang Backend API
             const res = await fetch("http://127.0.0.1:8000/api/auth/login", {

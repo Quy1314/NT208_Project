@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
@@ -84,7 +84,7 @@ def create_access_token(data: dict):
     return encoded_jwt
 
 @router.post("/login")
-def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login_user(form_data: OAuth2PasswordRequestForm = Depends(), is_remember: bool = Form(False), db: Session = Depends(get_db)):
     """
     API xử lý Đăng nhập chuẩn OAuth2 (dùng cho cả Frontend lẫn Swagger UI Authorize).
     Nhận Form Data (username, password), trả về JWT Token (Access Token).
@@ -102,6 +102,10 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = D
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Tài khoản hoặc mật khẩu không đúng."
         )
+
+    # Lưu trạng thái "Remember Me" vào CSDL cho User này
+    db_user.is_remember = is_remember
+    db.commit()
 
     # Sinh (Generate) JWT Token với mã định danh (subject 'sub') là ID của người dùng
     access_token = create_access_token(data={"sub": str(db_user.id)})
