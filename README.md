@@ -1,5 +1,6 @@
 # NT208 PROJECT - GROUP 4: AI Content Generator Platform
 
+👉 **[Xem Hướng dẫn Cài đặt & Khởi chạy (Runbook) tại đây](./runbook.md)**
 ## 📌 Giới thiệu dự án
 
 **🎯 Nền tảng hỗ trợ tạo nội dung đa phương tiện theo dự án**
