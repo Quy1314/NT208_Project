@@ -12,6 +12,16 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
+    const [rememberMe, setRememberMe] = useState(false); // State lưu trạng thái checkbox
+
+    // Tự động điền email nếu trước đó đã check Remember Me
+    React.useEffect(() => {
+        const savedEmail = localStorage.getItem("remembered_email");
+        if (savedEmail) {
+            setEmail(savedEmail);
+            setRememberMe(true);
+        }
+    }, []);
 
     // Xử lý sự kiện đăng nhập
     const handleLogin = async (e: React.FormEvent) => {
@@ -39,13 +49,19 @@ export default function LoginPage() {
                 throw new Error(data.detail || "Login failed");
             }
 
-            // Lưu JWT Token vào LocalStorage để các Request sau sử dụng xác thực User
+            // Lưu JWT Token vào LocalStorage
             localStorage.setItem("access_token", data.access_token);
 
-            // TODO: Decode token lấy User ID hoặc dùng dữ liệu data.user nếu cần lưu thêm
-            localStorage.setItem("user_email", data.user.email);
+            // Xử lý Remember Me (Lưu email nếu check, xóa nếu uncheck)
+            if (rememberMe) {
+                localStorage.setItem("remembered_email", email);
+            } else {
+                localStorage.removeItem("remembered_email");
+            }
 
-            // Chuyển hướng người dùng vào Dashboard / Trang chủ sau khi đăng nhập thành công
+            localStorage.setItem("user_email", email);
+
+            // Chuyển hướng
             router.push("/");
         } catch (err: any) {
             setError(err.message);
@@ -129,6 +145,20 @@ export default function LoginPage() {
                                 className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-colors placeholder-slate-400 text-slate-900 font-medium bg-slate-50"
                                 placeholder="••••••••"
                             />
+                        </div>
+
+                        {/* Remember Me Checkbox */}
+                        <div className="flex items-center">
+                            <input
+                                id="remember-me"
+                                type="checkbox"
+                                checked={rememberMe}
+                                onChange={(e) => setRememberMe(e.target.checked)}
+                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded cursor-pointer"
+                            />
+                            <label htmlFor="remember-me" className="ml-2 block text-sm font-medium text-slate-700 cursor-pointer">
+                                Remember me
+                            </label>
                         </div>
 
                         <button
