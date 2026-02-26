@@ -153,7 +153,14 @@ export default function LoginPage() {
                                 id="remember-me"
                                 type="checkbox"
                                 checked={rememberMe}
-                                onChange={(e) => setRememberMe(e.target.checked)}
+                                onChange={(e) => {
+                                    const isChecked = e.target.checked;
+                                    setRememberMe(isChecked);
+                                    if (!isChecked) {
+                                        // Xóa ngay lập tức nếu người dùng bỏ check (tránh login ảo)
+                                        localStorage.removeItem("remembered_email");
+                                    }
+                                }}
                                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded cursor-pointer"
                             />
                             <label htmlFor="remember-me" className="ml-2 block text-sm font-medium text-slate-700 cursor-pointer">
