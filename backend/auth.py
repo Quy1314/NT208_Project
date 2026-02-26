@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
@@ -84,19 +84,20 @@ def create_access_token(data: dict):
     return encoded_jwt
 
 @router.post("/login")
-def login_user(user: UserLogin, db: Session = Depends(get_db)):
+def login_user(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """
-    API xử lý Đăng nhập, nhận Email + Mật khẩu, trả về một JWT Token (Access Token).
-    Frontend sẽ lưu Token này lại và đính kèm vào phần Header của các request kế tiếp để hệ thống biết User là ai.
+    API xử lý Đăng nhập chuẩn OAuth2 (dùng cho cả Frontend lẫn Swagger UI Authorize).
+    Nhận Form Data (username, password), trả về JWT Token (Access Token).
     """
-    db_user = db.query(models.User).filter(models.User.email == user.email).first()
+    # Trong OAuth2PasswordRequestForm, trường email sẽ được map vào biến `username`
+    db_user = db.query(models.User).filter(models.User.email == form_data.username).first()
     if not db_user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Tài khoản hoặc mật khẩu không đúng."
         )
     
-    if not verify_password(user.password, db_user.password_hash):
+    if not verify_password(form_data.password, db_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Tài khoản hoặc mật khẩu không đúng."

@@ -20,11 +20,16 @@ export default function LoginPage() {
         setError("");
 
         try {
-            // Gửi HTTP POST request sang Backend API (giống cấu hình ở register)
+            // Chuyển Data sang định dạng Form-urlencoded để khớp chuẩn OAuth2 của FastAPI Swagger UI
+            const formData = new URLSearchParams();
+            formData.append("username", email); // Lưu ý: OAuth2 bắt buộc key phải tên là "username"
+            formData.append("password", password);
+
+            // Gửi HTTP POST request sang Backend API
             const res = await fetch("http://127.0.0.1:8000/api/auth/login", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password }),
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: formData,
             });
 
             // Chờ Backend phản hồi (parse sang Json) kết quả có chứa JWT Access Token
