@@ -17,19 +17,41 @@ import {
   ChevronDown
 } from "lucide-react";
 
+interface Project {
+  id: string;
+  title: string;
+  prompt: string;
+  content: string;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [title, setTitle] = useState("");
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Mock projects for UI
-  const projects = [
-    { id: "1", title: "Kịch bản Tiktok Nấu ăn" },
-    { id: "2", title: "Cốt truyện Sci-fi ngắn" },
-    { id: "3", title: "Ý tưởng Video Marketing" },
-  ];
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false); // Ngăn chặn Double-Submit (Race Conditions)
+
+  const fetchProjects = async () => {
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    if (!token) return;
+    try {
+      const res = await fetch("http://localhost:8000/api/projects/", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProjects(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch projects", e);
+    }
+  };
 
   useEffect(() => {
     // Auth check (Ưu tiên localStorage, nếu không có thì tìm trong sessionStorage)
@@ -42,6 +64,8 @@ export default function DashboardPage() {
     const email = localStorage.getItem("user_email") || sessionStorage.getItem("user_email") || "User";
     setUserEmail(email);
 
+    fetchProjects();
+
     // Handle click outside for dropdown
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -51,6 +75,77 @@ export default function DashboardPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [router]);
+
+  const handleSelectProject = async (id: string) => {
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    try {
+      const res = await fetch(`http://localhost:8000/api/projects/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedProject(data);
+        setIsCreating(false);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteProject = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // prevent triggering select project
+    if (!confirm("Bạn có chắc muốn xoá dự án này không?")) return;
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    try {
+      const res = await fetch(`http://localhost:8000/api/projects/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        if (selectedProject?.id === id) setSelectedProject(null);
+        fetchProjects();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    if (!title.trim() || !prompt.trim()) {
+      alert("Vui lòng nhập cả Tiêu đề và Prompt.");
+      return;
+    }
+
+    // Ngăn chặn race condition (click liên tục 2 lần)
+    if (isGenerating) return;
+
+    setIsGenerating(true);
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    try {
+      const res = await fetch("http://localhost:8000/api/projects/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ title, prompt })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTitle("");
+        setPrompt("");
+        setIsCreating(false);
+        setSelectedProject(data);
+        fetchProjects();
+      } else {
+        alert("Có lỗi xảy ra khi tạo dự án.");
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsGenerating(false); // Reset cờ trạng thái
+    }
+  };
 
   const handleLogout = () => {
     // Quét dọn sạch sẽ tất cả session & local storage (trừ cái remembered_email)
@@ -80,7 +175,9 @@ export default function DashboardPage() {
           </div>
 
           {/* New Project Button */}
-          <button className="flex items-center gap-2 bg-white border border-slate-200 hover:border-blue-300 hover:text-blue-600 transition-colors w-full p-2.5 rounded-xl text-sm font-semibold text-slate-700 shadow-sm mb-6">
+          <button
+            onClick={() => { setIsCreating(true); setSelectedProject(null); setTitle(""); setPrompt(""); }}
+            className="flex items-center gap-2 bg-white border border-slate-200 hover:border-blue-300 hover:text-blue-600 transition-colors w-full p-2.5 rounded-xl text-sm font-semibold text-slate-700 shadow-sm mb-6">
             <Plus size={18} />
             New Project
           </button>
@@ -92,10 +189,19 @@ export default function DashboardPage() {
             </div>
             <div className="space-y-1">
               {projects.map((proj) => (
-                <button key={proj.id} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-100 rounded-lg text-sm text-slate-700 font-medium transition-colors text-left group">
-                  <MessageSquare size={16} className="text-slate-400 group-hover:text-blue-500" />
-                  <span className="truncate flex-1">{proj.title}</span>
-                </button>
+                <div key={proj.id} className="group relative flex items-center w-full">
+                  <button
+                    onClick={() => handleSelectProject(proj.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${selectedProject?.id === proj.id ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-100 text-slate-700'}`}>
+                    <MessageSquare size={16} className={selectedProject?.id === proj.id ? 'text-blue-500' : 'text-slate-400 group-hover:text-blue-500'} />
+                    <span className="truncate flex-1 pr-6">{proj.title}</span>
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteProject(proj.id, e)}
+                    className="absolute right-2 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1">
+                    <LogOut size={14} className="rotate-180" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -164,119 +270,115 @@ export default function DashboardPage() {
           </header>
 
           {/* CENTER STAGE (Greeting & Cards) */}
-          <main className="flex-1 overflow-y-auto px-4 pb-32">
-            <div className="max-w-4xl mx-auto h-full flex flex-col justify-center items-center pt-10 lg:pt-20">
-
-              {/* Avatar & Greeting */}
-              <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-blue-500 to-blue-300 shadow-md mb-6"></div>
-              <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-3 tracking-tight">
-                Hi, there 👋
-              </h2>
-              <p className="text-slate-500 font-medium mb-12 text-center">
-                Tell us what you need, and we'll handle the rest.
-              </p>
-
-              {/* Suggestion Cards Container */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-3xl mb-10">
-                {/* Card 1: Dark Mode */}
-                <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-sm transform transition-transform hover:-translate-y-1 cursor-pointer">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-[10px] font-bold">S</div>
-                      <span className="text-xs font-semibold text-slate-300">Sam Lee</span>
-                    </div>
-                    <span className="bg-blue-600 text-white text-[10px] font-bold px-2 py-1 rounded-md">Data Assistant</span>
-                  </div>
-                  <p className="text-sm font-medium leading-relaxed">
-                    Designed to help manage sales processes and maximize customer engagement.
-                  </p>
+          <main className="flex-1 overflow-y-auto px-4 pb-40">
+            {selectedProject ? (
+              <div className="max-w-3xl mx-auto pt-10 px-4">
+                <h2 className="text-2xl font-bold text-slate-800 mb-6 px-4">{selectedProject.title}</h2>
+                <div className="bg-blue-50 text-blue-900 p-4 rounded-xl mb-6 shadow-sm border border-blue-100 self-end ml-auto max-w-[85%]">
+                  <p className="font-semibold text-xs text-blue-700 mb-1 uppercase tracking-wider">Your Prompt</p>
+                  <p className="text-sm font-medium whitespace-pre-wrap">{selectedProject.prompt}</p>
                 </div>
 
-                {/* Card 2: Checklist */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm transform transition-transform hover:-translate-y-1 cursor-pointer flex flex-col">
-                  <div className="space-y-3 flex-1">
-                    <div className="flex items-start gap-2 text-xs font-medium text-slate-700">
-                      <div className="w-4 h-4 rounded-full border border-slate-300 flex-shrink-0 mt-0.5"></div>
-                      Answer RFP documentation
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-slate-700 mb-8 w-full max-w-[95%]">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center text-white">
+                      <Sparkles size={12} />
                     </div>
-                    <div className="flex items-start gap-2 text-xs font-medium text-slate-700">
-                      <div className="w-4 h-4 rounded-full border border-slate-300 flex-shrink-0 mt-0.5"></div>
-                      Conduct a competitor analysis
-                    </div>
-                    <div className="flex items-start gap-2 text-xs font-medium text-slate-700">
-                      <div className="w-4 h-4 rounded-full border border-slate-300 flex-shrink-0 mt-0.5"></div>
-                      Provide feedback on communication
-                    </div>
+                    <span className="font-bold text-sm">AI Generated Content</span>
                   </div>
-                  <div className="flex justify-between items-center mt-4 pt-3 border-t border-slate-50 text-[10px] font-semibold text-slate-400">
-                    <span>Tasks</span>
-                    <span className="text-blue-500 cursor-pointer hover:underline">View All</span>
-                  </div>
-                </div>
-
-                {/* Card 3: Suggested Prompt */}
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm transform transition-transform hover:-translate-y-1 cursor-pointer flex flex-col">
-                  <div className="flex justify-end mb-2">
-                    <MoreHorizontal size={16} className="text-slate-400" />
-                  </div>
-                  <p className="text-sm font-semibold text-slate-800 leading-relaxed flex-1">
-                    What are the key benefits of Product 1 that I should highlight to potential clients?
-                  </p>
-                  <div className="mt-4 text-[10px] font-semibold text-slate-400">
-                    Suggested prompt
+                  <div className="prose prose-sm max-w-none prose-slate">
+                    {selectedProject.content === "Waiting for LLM generation..." ? (
+                      <div className="flex items-center gap-2 text-slate-400 animate-pulse">
+                        <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+                        <div className="w-2 h-2 bg-slate-400 rounded-full animation-delay-200"></div>
+                        <div className="w-2 h-2 bg-slate-400 rounded-full animation-delay-400"></div>
+                        <span className="ml-2 text-sm">AI is writing your story...</span>
+                      </div>
+                    ) : (
+                      <p className="whitespace-pre-wrap leading-relaxed">{selectedProject.content}</p>
+                    )}
                   </div>
                 </div>
               </div>
+            ) : isCreating ? (
+              <div className="max-w-3xl mx-auto pt-10 px-4 h-full flex flex-col justify-center">
+                <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">Create New Project</h2>
+                <p className="text-slate-500 font-medium mb-10">Define your title and instruct the AI with a prompt.</p>
 
-              {/* Pill Tags */}
-              <div className="flex flex-wrap justify-center gap-3">
-                <button className="flex items-center gap-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-600 text-xs font-bold px-4 py-2.5 rounded-full shadow-sm transition-all">
-                  <span className="text-red-400">📅</span> Connect Calendar
-                </button>
-                <button className="flex items-center gap-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-600 text-xs font-bold px-4 py-2.5 rounded-full shadow-sm transition-all">
-                  <span className="text-blue-400">🎯</span> Demo Task
-                </button>
-                <button className="flex items-center gap-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-600 text-xs font-bold px-4 py-2.5 rounded-full shadow-sm transition-all">
-                  <span className="text-orange-400">🧩</span> Browse Integrations
-                </button>
-                <button className="flex items-center gap-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-600 text-xs font-bold px-4 py-2.5 rounded-full shadow-sm transition-all">
-                  <span className="text-emerald-400">📝</span> Shared in Notes
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-slate-700 mb-2 pl-1">Project Title</label>
+                  <input
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    placeholder="e.g., A sci-fi novel about Mars"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-slate-800 shadow-sm"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="max-w-4xl mx-auto h-full flex flex-col justify-center items-center pt-10 lg:pt-20">
+                {/* Avatar & Greeting */}
+                <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-blue-500 to-blue-300 shadow-md mb-6"></div>
+                <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-3 tracking-tight">
+                  Hi, there 👋
+                </h2>
+                <p className="text-slate-500 font-medium mb-12 text-center">
+                  Select a project from the sidebar or create a new one to begin.
+                </p>
+                <button
+                  onClick={() => setIsCreating(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-sm transition-colors flex items-center gap-2">
+                  <Plus size={18} /> Start Creative Project
                 </button>
               </div>
-            </div>
+            )}
           </main>
 
           {/* BOTTOM PROMPT INPUT */}
-          <div className="absolute bottom-0 left-0 w-full p-4 lg:p-8 bg-gradient-to-t from-white via-white to-transparent">
-            <div className="max-w-3xl mx-auto bg-white border border-slate-200 shadow-sm rounded-2xl p-2 focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 transition-all">
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Ask me anything..."
-                className="w-full max-h-32 min-h-[60px] p-3 text-slate-800 focus:outline-none resize-none placeholder-slate-400 bg-transparent font-medium"
-              />
-              <div className="flex items-center justify-between pt-2 px-2 pb-1 border-t border-slate-50">
-                <button className="flex items-center gap-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors">
-                  Select Source <ChevronDown size={14} />
-                </button>
+          {isCreating && (
+            <div className="absolute bottom-0 left-0 w-full p-4 lg:p-8 bg-gradient-to-t from-white via-white to-transparent">
+              <div className="max-w-3xl mx-auto bg-white border border-slate-200 shadow-sm rounded-2xl p-2 focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 transition-all">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe your story, characters, and plot here..."
+                  className="w-full max-h-32 min-h-[60px] p-3 text-slate-800 focus:outline-none resize-none placeholder-slate-400 bg-transparent font-medium"
+                />
+                <div className="flex items-center justify-between pt-2 px-2 pb-1 border-t border-slate-50">
+                  <button className="flex items-center gap-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors">
+                    Select Source <ChevronDown size={14} />
+                  </button>
 
-                <div className="flex items-center gap-2">
-                  <button className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 px-2 py-1.5 transition-colors">
-                    <Paperclip size={14} /> Attach
-                  </button>
-                  <button className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 px-2 py-1.5 transition-colors">
-                    <Mic size={14} /> Voice
-                  </button>
-                  <button className="flex items-center gap-1.5 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 px-4 py-2 rounded-xl transition-all shadow-sm ml-2">
-                    <ArrowUp size={16} /> Send
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 px-2 py-1.5 transition-colors">
+                      <Paperclip size={14} /> Attach
+                    </button>
+                    <button className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 px-2 py-1.5 transition-colors">
+                      <Mic size={14} /> Voice
+                    </button>
+                    <button
+                      onClick={handleCreateProject}
+                      disabled={isGenerating}
+                      className={`flex items-center gap-1.5 text-xs font-bold text-white px-4 py-2 rounded-xl transition-all shadow-sm ml-2 ${isGenerating ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                      {isGenerating ? (
+                        <>
+                          <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={16} /> Generate
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
+              <div className="text-center mt-3 text-[10px] text-slate-400 font-medium">
+                AI may display inaccurate info, so please double check the response.
+              </div>
             </div>
-            <div className="text-center mt-3 text-[10px] text-slate-400 font-medium">
-              AI may display inaccurate info, so please double check the response. <span className="underline cursor-pointer">Your Privacy & Policy</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

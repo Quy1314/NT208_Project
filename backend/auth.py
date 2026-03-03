@@ -24,17 +24,14 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 # Cấu hình Passlib để sử dụng thuật toán bcrypt mã hóa mật khẩu, tránh bị lộ khi bị hack database
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Schema (Khuôn mẫu) báo hiệu cho FastAPI biết format dữ liệu JSON mà Frontend sẽ gửi lên
-class UserRegister(BaseModel):
-    email: str
-    password: str
+# Schema đã được chuyển sang file models.py
 
 # Hàm phụ trợ dùng để băm (hash) mật khẩu gốc thành chuỗi bảo mật an toàn
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 @router.post("/register")
-def register_user(user: UserRegister, db: Session = Depends(get_db)):
+def register_user(user: models.UserRegister, db: Session = Depends(get_db)):
     """
     API đăng ký người dùng mới.
     Quy trình: Kiểm tra email -> Băm mật khẩu -> Lưu xuống CSDL.
@@ -65,10 +62,7 @@ def register_user(user: UserRegister, db: Session = Depends(get_db)):
         }
     }
 
-# Schema Data dùng riêng cho việc Login (tránh nhầm lẫn với Register)
-class UserLogin(BaseModel):
-    email: str
-    password: str
+# Schema Data dùng riêng cho việc Login (tránh nhầm lẫn với Register) đã được chuyển sang models.py
 
 # Hàm kiểm chứng xem password nhập vào có khớp với mã băm lấy trong DB không
 def verify_password(plain_password, hashed_password):

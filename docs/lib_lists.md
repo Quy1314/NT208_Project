@@ -8,3 +8,4 @@ bcrypt==4.0.1
 pydantic
 python-jose[cryptography]
 python-multipart
+llama-cpp-python

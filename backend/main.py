@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
 import models
 import auth
+from routers import projects
 from sqlalchemy import text
 
 # Tạo sẵn toàn bộ bảng trong database (dựa trên các classes ở models.py) nếu chưa tồn tại
@@ -20,8 +21,10 @@ app.add_middleware(
     allow_headers=["*"], # Cho phép tất cả các header parameter
 )
 
-# Gắn các router con (ở đây là các API liên quan đến Authentication như /register, /login)
+# Gắn các router con
 app.include_router(auth.router)
+app.include_router(projects.router)
+
 @app.get("/")
 def read_root():
     # API cơ bản để kiểm tra server có đang chạy ko

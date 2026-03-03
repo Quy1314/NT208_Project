@@ -24,3 +24,29 @@ class Project(Base):
     content = Column(Text, nullable=False, server_default="")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+# ==========================================
+# PYDANTIC SCHEMAS (Data Validation Models)
+# ==========================================
+from pydantic import BaseModel
+
+class UserRegister(BaseModel):
+    email: str
+    password: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class ProjectCreateReq(BaseModel):
+    title: str
+    prompt: str
+
+class ProjectResponse(BaseModel):
+    id: str
+    title: str
+    prompt: str
+    content: str
+    
+    class Config:
+        from_attributes = True
