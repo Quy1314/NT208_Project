@@ -37,9 +37,39 @@ class PasswordResetToken(Base):
     used_at = Column(TIMESTAMP(timezone=True), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
+class ProjectContextEntry(Base):
+    __tablename__ = "project_context_entries"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    prompt = Column(Text, nullable=False)
+    language = Column(String(20), nullable=False, server_default="vietnamese")
+    generated_content = Column(Text, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class TeamWorkspace(Base):
+    __tablename__ = "team_workspaces"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class ProjectTeamToken(Base):
+    __tablename__ = "project_team_tokens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    team_id = Column(UUID(as_uuid=True), ForeignKey("team_workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String(255), nullable=False, unique=True, index=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
 # ==========================================
 # PYDANTIC SCHEMAS (Data Validation Models)
 # ==========================================
+from typing import Literal
 from pydantic import BaseModel
 
 class UserRegister(BaseModel):
@@ -59,9 +89,27 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class TeamCreateReq(BaseModel):
+    name: str
+
+
+class TeamResponse(BaseModel):
+    id: str
+    name: str
+
 class ProjectCreateReq(BaseModel):
     title: str
     prompt: str
+    language: Literal["vietnamese", "english"] = "vietnamese"
+
+class ProjectContinueReq(BaseModel):
+    prompt: str
+    language: Literal["vietnamese", "english"] = "vietnamese"
 
 class ProjectResponse(BaseModel):
     id: str

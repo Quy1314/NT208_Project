@@ -8,6 +8,7 @@ import { API_BASE_URL } from "@/lib/api";
 
 export default function LoginPage() {
     const router = useRouter(); // Dùng để chuyển hướng trang
+    const [isDark, setIsDark] = useState(true);
 
     // State lưu trữ dữ liệu form
     const [email, setEmail] = useState("");
@@ -23,6 +24,9 @@ export default function LoginPage() {
             setEmail(savedEmail);
             setRememberMe(true);
         }
+        const savedTheme = localStorage.getItem("theme");
+        if (savedTheme === "light") setIsDark(false);
+        if (savedTheme === "dark") setIsDark(true);
     }, []);
 
     // Xử lý sự kiện đăng nhập
@@ -83,24 +87,32 @@ export default function LoginPage() {
             role="Creative Platform"
         >
             <form onSubmit={handleLogin} className="space-y-5" autoComplete="off">
-                {error && <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
+                {error && <div className={`rounded-lg border p-3 text-sm ${isDark ? "border-red-500/40 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
                 <div>
-                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-400" htmlFor="email">Email</label>
+                    <label className={`mb-1.5 block text-xs uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-600"}`} htmlFor="email">Email</label>
                     <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                        className={`w-full rounded-lg border px-4 py-3 text-sm focus:border-blue-500 focus:outline-none ${
+                            isDark
+                              ? "border-slate-700 bg-slate-950 text-white placeholder-slate-500"
+                              : "border-slate-300 bg-white text-slate-900 placeholder-slate-400"
+                        }`}
                         placeholder="you@gmail.com" autoComplete="off" />
                 </div>
                 <div>
                     <div className="mb-1.5 flex items-center justify-between">
-                        <label className="text-xs uppercase tracking-wider text-slate-400" htmlFor="password">Password</label>
+                        <label className={`text-xs uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-600"}`} htmlFor="password">Password</label>
                         <Link href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300">Forgot password?</Link>
                     </div>
                     <input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                        className={`w-full rounded-lg border px-4 py-3 text-sm focus:border-blue-500 focus:outline-none ${
+                            isDark
+                              ? "border-slate-700 bg-slate-950 text-white placeholder-slate-500"
+                              : "border-slate-300 bg-white text-slate-900 placeholder-slate-400"
+                        }`}
                         placeholder="••••••••" autoComplete="new-password" />
                 </div>
-                <label className="flex items-center gap-2 text-sm text-slate-300">
-                    <input id="remember-me" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="h-4 w-4 rounded border-slate-600 bg-slate-900" />
+                <label className={`flex items-center gap-2 text-sm ${isDark ? "text-slate-300" : "text-slate-700"}`}>
+                    <input id="remember-me" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className={`h-4 w-4 rounded ${isDark ? "border-slate-600 bg-slate-900" : "border-slate-300 bg-white"}`} />
                     Remember me
                 </label>
                 <button type="submit" disabled={loading}
@@ -108,7 +120,7 @@ export default function LoginPage() {
                     {loading ? "Logging in..." : "Log in"}
                 </button>
             </form>
-            <p className="mt-6 text-center text-sm text-slate-400">
+            <p className={`mt-6 text-center text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
                 Chưa có tài khoản? <Link href="/register" className="font-semibold text-blue-400 hover:text-blue-300">Đăng ký</Link>
             </p>
         </AuthShell>

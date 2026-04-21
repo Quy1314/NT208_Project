@@ -10,13 +10,16 @@ import {
   User,
   Plus,
   MoreHorizontal,
+  Trash2,
   Paperclip,
   Mic,
   ArrowUp,
   LayoutDashboard,
   Sparkles,
   ChevronDown,
-  X
+  X,
+  Moon,
+  Sun
 } from "lucide-react";
 
 interface Project {
@@ -26,11 +29,17 @@ interface Project {
   content: string;
 }
 
+interface TeamWorkspace {
+  id: string;
+  name: string;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [continuePrompt, setContinuePrompt] = useState("");
   const [title, setTitle] = useState("");
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -38,10 +47,24 @@ export default function DashboardPage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false); // Ngăn chặn Double-Submit (Race Conditions)
+  const [isContinuing, setIsContinuing] = useState(false);
   const [modelName, setModelName] = useState("Qwen/Qwen2.5-72B-Instruct");
   const [creativity, setCreativity] = useState("Balanced");
+  const [language, setLanguage] = useState<"vietnamese" | "english">("vietnamese");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<{ id: string; email: string; created_at: string } | null>(null);
+  const [teams, setTeams] = useState<TeamWorkspace[]>([]);
+  const [newTeamName, setNewTeamName] = useState("");
+  const [selectedTeamId, setSelectedTeamId] = useState("");
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
+  const [isProjectSettingsOpen, setIsProjectSettingsOpen] = useState(false);
+  const [teamToken, setTeamToken] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [isDark, setIsDark] = useState(true);
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
@@ -81,7 +104,33 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchTeams = async () => {
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/teams/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTeams(data);
+        if (!selectedTeamId && data.length > 0) setSelectedTeamId(data[0].id);
+      }
+    } catch (e) {
+      console.error("Failed to fetch teams", e);
+    }
+  };
+
   useEffect(() => {
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "light") {
+      setIsDark(false);
+    } else if (savedTheme === "dark") {
+      setIsDark(true);
+    } else {
+      setIsDark(window.matchMedia("(prefers-color-scheme: dark)").matches);
+    }
+
     // Auth check (Ưu tiên localStorage, nếu không có thì tìm trong sessionStorage)
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     if (!token || token === "undefined" || token === "null") {
@@ -93,6 +142,7 @@ export default function DashboardPage() {
     setUserEmail(email);
 
     fetchProjects();
+    fetchTeams();
 
     // Handle click outside for dropdown
     const handleClickOutside = (event: MouseEvent) => {
@@ -104,6 +154,20 @@ export default function DashboardPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [router]);
 
+  const toggleTheme = () => {
+    setIsDark((prev) => {
+      const next = !prev;
+      localStorage.setItem("theme", next ? "dark" : "light");
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (isProjectSettingsOpen && selectedProject && selectedTeamId) {
+      fetchProjectTeamToken(selectedProject.id, selectedTeamId);
+    }
+  }, [isProjectSettingsOpen, selectedProject, selectedTeamId]);
+
   const handleSelectProject = async (id: string) => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     try {
@@ -114,6 +178,7 @@ export default function DashboardPage() {
         const data = await res.json();
         setSelectedProject(data);
         setIsCreating(false);
+        setContinuePrompt("");
       } else if (res.status === 401) {
         handleLogout();
       }
@@ -122,8 +187,8 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeleteProject = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // prevent triggering select project
+  const handleDeleteProject = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation(); // prevent triggering select project
     if (!confirm("Bạn có chắc muốn xoá dự án này không?")) return;
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     try {
@@ -139,6 +204,62 @@ export default function DashboardPage() {
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleCreateTeam = async () => {
+    if (!newTeamName.trim()) return;
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    if (!token) return;
+    setIsCreatingTeam(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/teams/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: newTeamName }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTeams((prev) => [...prev, data]);
+        setSelectedTeamId(data.id);
+        setNewTeamName("");
+      } else {
+        alert(data.detail || "Không thể tạo team.");
+      }
+    } catch {
+      alert("Lỗi kết nối khi tạo team.");
+    } finally {
+      setIsCreatingTeam(false);
+    }
+  };
+
+  const fetchProjectTeamToken = async (projectId: string, teamId: string) => {
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/teams/project-token?project_id=${projectId}&team_id=${teamId}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTeamToken(data.token || "");
+      } else {
+        setTeamToken("");
+      }
+    } catch {
+      setTeamToken("");
+    }
+  };
+
+  const copyText = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      alert("Không thể copy.");
     }
   };
 
@@ -163,7 +284,7 @@ export default function DashboardPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ title: finalTitle, prompt })
+        body: JSON.stringify({ title: finalTitle, prompt, language })
       });
       if (res.ok) {
         const data = await res.json();
@@ -184,6 +305,42 @@ export default function DashboardPage() {
     }
   };
 
+  const handleContinueProject = async () => {
+    if (!selectedProject) return;
+    if (!continuePrompt.trim()) {
+      alert("Vui lòng nhập yêu cầu viết tiếp.");
+      return;
+    }
+    if (isContinuing) return;
+
+    setIsContinuing(true);
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/continue`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ prompt: continuePrompt, language })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedProject(data);
+        setContinuePrompt("");
+        fetchProjects();
+      } else if (res.status === 401) {
+        handleLogout();
+      } else {
+        alert("Có lỗi xảy ra khi viết tiếp dự án.");
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsContinuing(false);
+    }
+  };
+
   function handleLogout() {
     // Quét dọn sạch sẽ tất cả session & local storage (trừ cái remembered_email)
     localStorage.removeItem("access_token");
@@ -193,25 +350,68 @@ export default function DashboardPage() {
 
     window.location.href = "/logout";
   }
+
+  const handleChangePassword = async () => {
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    if (!token) return;
+    if (!currentPassword || !newPassword) {
+      setPasswordError("Vui lòng nhập đầy đủ mật khẩu hiện tại và mật khẩu mới.");
+      return;
+    }
+
+    setChangingPassword(true);
+    setPasswordError("");
+    setPasswordMessage("");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPasswordError(data.detail || "Không thể đổi mật khẩu.");
+        return;
+      }
+      setPasswordMessage(data.message || "Đổi mật khẩu thành công.");
+      setCurrentPassword("");
+      setNewPassword("");
+    } catch (e) {
+      setPasswordError("Lỗi kết nối máy chủ.");
+    } finally {
+      setChangingPassword(false);
+    }
+  };
   return (
-    <div className="flex h-screen bg-slate-100 p-2 sm:p-4 font-sans text-slate-900">
+    <div className={`flex h-screen p-2 sm:p-4 font-sans ${isDark ? "bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-900"}`}>
       {/* MAIN APP CONTAINER */}
-      <div className="flex w-full h-full bg-white rounded-[2rem] overflow-hidden shadow-sm border border-slate-200">
+      <div className={`flex w-full h-full rounded-[2rem] overflow-hidden shadow-sm ${
+        isDark ? "bg-slate-900 border border-slate-800" : "bg-white border border-slate-200"
+      }`}>
 
         {/* 1. LEFT SIDEBAR (Projects) */}
-        <div className="w-64 bg-slate-50 border-r border-slate-100 flex flex-col pt-6 pb-4 px-4 hidden md:flex">
+        <div className={`w-64 border-r flex flex-col pt-6 pb-4 px-4 hidden md:flex ${
+          isDark ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-100"
+        }`}>
           {/* Logo Area */}
           <div className="flex items-center gap-3 px-2 mb-8">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white shadow-sm">
               <Sparkles size={16} />
             </div>
-            <span className="font-bold text-lg tracking-tight">AI Assistant</span>
+            <span className={`font-bold text-lg tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>AI Assistant</span>
           </div>
 
           {/* New Project Button */}
           <button
-            onClick={() => { setIsCreating(true); setSelectedProject(null); setTitle(""); setPrompt(""); }}
-            className="flex items-center gap-2 bg-white border border-slate-200 hover:border-blue-300 hover:text-blue-600 transition-colors w-full p-2.5 rounded-xl text-sm font-semibold text-slate-700 shadow-sm mb-6">
+            onClick={() => { setIsCreating(true); setSelectedProject(null); setTitle(""); setPrompt(""); setContinuePrompt(""); }}
+            className={`flex items-center gap-2 transition-colors w-full p-2.5 rounded-xl text-sm font-semibold shadow-sm mb-6 ${
+              isDark
+                ? "bg-slate-900 border border-slate-700 text-slate-200 hover:border-blue-400 hover:text-blue-300"
+                : "bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600"
+            }`}>
             <Plus size={18} />
             New Project
           </button>
@@ -232,17 +432,75 @@ export default function DashboardPage() {
                   </button>
                   <button
                     onClick={(e) => handleDeleteProject(proj.id, e)}
-                    className="absolute right-2 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 p-1">
-                    <LogOut size={14} className="rotate-180" />
+                    title="Xóa project"
+                    className={`absolute right-2 p-1 transition-opacity ${
+                      selectedProject?.id === proj.id
+                        ? "opacity-100 text-red-500"
+                        : "opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
+                    }`}
+                  >
+                    <Trash2 size={14} />
                   </button>
                 </div>
               ))}
             </div>
           </div>
 
+          <div className={`mt-3 pt-3 ${isDark ? "border-t border-slate-800" : "border-t border-slate-200"}`}>
+            <div className={`text-xs font-bold uppercase tracking-wider mb-2 px-2 ${
+              isDark ? "text-slate-300" : "text-slate-400"
+            }`}>
+              Team Workspace
+            </div>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <input
+                  value={newTeamName}
+                  onChange={(e) => setNewTeamName(e.target.value)}
+                  placeholder="Team name"
+                  className={`flex-1 rounded-lg border px-2 py-1.5 text-xs focus:outline-none ${
+                    isDark
+                      ? "border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500 focus:border-blue-400"
+                      : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:border-blue-500"
+                  }`}
+                />
+                <button
+                  onClick={handleCreateTeam}
+                  disabled={isCreatingTeam}
+                  className="rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {isCreatingTeam ? "..." : "Create"}
+                </button>
+              </div>
+              <select
+                value={selectedTeamId}
+                onChange={(e) => setSelectedTeamId(e.target.value)}
+                className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none ${
+                  isDark
+                    ? "border-slate-700 bg-slate-900 text-slate-100 focus:border-blue-400"
+                    : "border-slate-200 bg-white text-slate-900 focus:border-blue-500"
+                }`}
+              >
+                <option value="">Chọn team</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>{team.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           {/* Bottom Sidebar Settings */}
           <div className="mt-auto pt-4 border-t border-slate-200/60">
-            <button className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-100 rounded-lg text-sm text-slate-700 font-medium transition-colors">
+            <button
+              onClick={() => {
+                if (!selectedProject) {
+                  alert("Vui lòng chọn project trước.");
+                  return;
+                }
+                setIsProjectSettingsOpen(true);
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-100 rounded-lg text-sm text-slate-700 font-medium transition-colors"
+            >
               <Settings size={18} className="text-slate-400" />
               Settings
             </button>
@@ -250,7 +508,7 @@ export default function DashboardPage() {
         </div>
 
         {/* 2. MAIN CONTENT AREA */}
-        <div className="flex-1 flex flex-col relative bg-white">
+        <div className={`flex-1 flex flex-col relative ${isDark ? "bg-slate-900" : "bg-white"}`}>
 
           {/* TOP HEADER (User Dropdown) */}
           <header className="flex justify-between items-center p-5 lg:px-8">
@@ -262,19 +520,32 @@ export default function DashboardPage() {
             </div>
             <div className="hidden md:flex items-center gap-4">
               {/* Breadcrumbs / Top Actions can go here */}
-              <span className="text-sm font-semibold text-slate-800 bg-slate-100 px-3 py-1.5 rounded-full">Test  GPT Plus</span>
+              <span className={`text-sm font-semibold px-3 py-1.5 rounded-full ${isDark ? "text-slate-100 bg-slate-800" : "text-slate-800 bg-slate-100"}`}>Test  GPT Plus</span>
             </div>
 
             {/* User Menu Dropdown */}
-            <div className="relative" ref={userMenuRef}>
+            <div className="relative flex items-center gap-2" ref={userMenuRef}>
+              <button
+                onClick={toggleTheme}
+                className={`rounded-full p-2 border transition-colors ${
+                  isDark
+                    ? "border-slate-700 text-slate-100 hover:bg-slate-800"
+                    : "border-slate-200 text-slate-700 hover:bg-slate-100"
+                }`}
+                title={isDark ? "Chuyển sáng" : "Chuyển tối"}
+              >
+                {isDark ? <Sun size={15} /> : <Moon size={15} />}
+              </button>
               <button
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="flex items-center gap-2 hover:bg-slate-50 p-1.5 pr-3 rounded-full border border-slate-200 transition-colors"
+                className={`flex items-center gap-2 p-1.5 pr-3 rounded-full border transition-colors ${
+                  isDark ? "hover:bg-slate-800 border-slate-700" : "hover:bg-slate-50 border-slate-200"
+                }`}
               >
                 <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center uppercase">
                   {userEmail ? userEmail.charAt(0) : "U"}
                 </div>
-                <span className="text-sm font-semibold text-slate-700 hidden sm:block max-w-[120px] truncate">
+                <span className={`text-sm font-semibold hidden sm:block max-w-[120px] truncate ${isDark ? "text-slate-100" : "text-slate-700"}`}>
                   {userEmail}
                 </span>
                 <ChevronDown size={14} className="text-slate-400" />
@@ -282,20 +553,26 @@ export default function DashboardPage() {
 
               {/* Dropdown Panel */}
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="px-4 py-3 border-b border-slate-100 mb-1">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Signed in as</p>
-                    <p className="text-sm font-bold text-slate-900 truncate">{userEmail}</p>
+                <div className={`absolute right-0 mt-2 w-56 rounded-xl shadow-lg py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200 ${
+                  isDark ? "bg-slate-900 border border-slate-700" : "bg-white border border-slate-100"
+                }`}>
+                  <div className={`px-4 py-3 mb-1 ${isDark ? "border-b border-slate-700" : "border-b border-slate-100"}`}>
+                    <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>Signed in as</p>
+                    <p className={`text-sm font-bold truncate ${isDark ? "text-slate-100" : "text-slate-900"}`}>{userEmail}</p>
                   </div>
                   <button
                     onClick={fetchUserProfile}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors">
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                      isDark ? "text-slate-200 hover:bg-slate-800 hover:text-blue-300" : "text-slate-700 hover:bg-slate-50 hover:text-blue-600"
+                    }`}>
                     <User size={16} />
                     User Profile
                   </button>
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors mt-1 border-t border-slate-50"
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 transition-colors mt-1 ${
+                      isDark ? "hover:bg-red-950/40 border-t border-slate-800" : "hover:bg-red-50 border-t border-slate-50"
+                    }`}
                   >
                     <LogOut size={16} />
                     Log out
@@ -309,7 +586,15 @@ export default function DashboardPage() {
           <main className="flex-1 overflow-y-auto px-4 pb-40">
             {selectedProject ? (
               <div className="max-w-3xl mx-auto pt-10 px-4">
-                <h2 className="text-2xl font-bold text-slate-800 mb-6 px-4">{selectedProject.title}</h2>
+                <div className="mb-6 flex items-center justify-between px-4">
+                  <h2 className="text-2xl font-bold text-slate-800">{selectedProject.title}</h2>
+                  <button
+                    onClick={() => handleDeleteProject(selectedProject.id)}
+                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100"
+                  >
+                    Xóa project
+                  </button>
+                </div>
                 <div className="bg-blue-50 text-blue-900 p-4 rounded-xl mb-6 shadow-sm border border-blue-100 self-end ml-auto max-w-[85%]">
                   <p className="font-semibold text-xs text-blue-700 mb-1 uppercase tracking-wider">Your Prompt</p>
                   <p className="text-sm font-medium whitespace-pre-wrap">{selectedProject.prompt}</p>
@@ -362,15 +647,15 @@ export default function DashboardPage() {
           </main>
 
           { }
-          {isCreating && (
+          {(isCreating || selectedProject) && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[95%] sm:w-[85%] max-w-4xl z-30">
               <div className="bg-[#1b1c20] border border-[#2a2c31] shadow-[0_10px_40px_rgba(0,0,0,0.5)] rounded-3xl p-3 flex flex-col gap-2 transition-all">
 
                 {/* Input Area */}
                 <textarea
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Describe your story, characters, and plot here..."
+                  value={selectedProject ? continuePrompt : prompt}
+                  onChange={(e) => selectedProject ? setContinuePrompt(e.target.value) : setPrompt(e.target.value)}
+                  placeholder={selectedProject ? "Nhập yêu cầu để AI viết tiếp dự án này..." : "Describe your story, characters, and plot here..."}
                   className="w-full max-h-32 min-h-[60px] p-3 text-[#f3f4f6] focus:outline-none resize-none placeholder-[#6b7280] bg-transparent font-medium"
                 />
 
@@ -396,6 +681,14 @@ export default function DashboardPage() {
                       <option>Balanced</option>
                       <option>Creative</option>
                     </select>
+                    <select
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value as "vietnamese" | "english")}
+                      className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg"
+                    >
+                      <option value="vietnamese">vietnamese</option>
+                      <option value="english">english</option>
+                    </select>
                   </div>
 
                   {/* Right: Original Tools & Generate */}
@@ -408,17 +701,17 @@ export default function DashboardPage() {
                     </button>
 
                     <button
-                      onClick={handleCreateProject}
-                      disabled={isGenerating}
-                      className={`flex items-center gap-1.5 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all shadow-md ml-2 ${isGenerating ? 'bg-indigo-500/50 cursor-not-allowed' : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 hover:shadow-lg'}`}>
-                      {isGenerating ? (
+                      onClick={selectedProject ? handleContinueProject : handleCreateProject}
+                      disabled={selectedProject ? isContinuing : isGenerating}
+                      className={`flex items-center gap-1.5 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all shadow-md ml-2 ${(selectedProject ? isContinuing : isGenerating) ? 'bg-indigo-500/50 cursor-not-allowed' : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 hover:shadow-lg'}`}>
+                      {(selectedProject ? isContinuing : isGenerating) ? (
                         <>
                           <div className="w-4 h-4 rounded-full border-2 border-white/80 border-t-transparent animate-spin"></div>
-                          Generating...
+                          {selectedProject ? "Đang viết tiếp..." : "Generating..."}
                         </>
                       ) : (
                         <>
-                          <Sparkles size={16} /> Generate
+                          <Sparkles size={16} /> {selectedProject ? "Viết tiếp" : "Generate"}
                         </>
                       )}
                     </button>
@@ -474,6 +767,71 @@ export default function DashboardPage() {
                     <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">Created At</label>
                     <div className="w-full bg-[#2a2c31] rounded-xl px-4 py-3.5 text-[14px] font-medium text-[#f3f4f6]">
                       {userProfile?.created_at ? new Date(userProfile.created_at).toLocaleString('vi-VN') : 'N/A'}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-[#32353d] pt-4 mt-2 space-y-3">
+                    <label className="block text-[13px] font-semibold text-[#e5e7eb]">Đổi mật khẩu</label>
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Mật khẩu hiện tại"
+                      className="w-full bg-[#2a2c31] rounded-xl px-4 py-3 text-[14px] text-[#f3f4f6] outline-none border border-transparent focus:border-blue-500"
+                    />
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Mật khẩu mới (>= 8 ký tự)"
+                      className="w-full bg-[#2a2c31] rounded-xl px-4 py-3 text-[14px] text-[#f3f4f6] outline-none border border-transparent focus:border-blue-500"
+                    />
+                    {passwordError && <p className="text-xs text-red-400">{passwordError}</p>}
+                    {passwordMessage && <p className="text-xs text-emerald-400">{passwordMessage}</p>}
+                    <button
+                      onClick={handleChangePassword}
+                      disabled={changingPassword}
+                      className="w-full rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-semibold px-4 py-2.5 transition-colors"
+                    >
+                      {changingPassword ? "Đang cập nhật..." : "Cập nhật mật khẩu"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {isProjectSettingsOpen && selectedProject && (
+            <>
+              <div
+                className="absolute inset-0 bg-slate-900/20 backdrop-blur-[2px] z-40 animate-in fade-in"
+                onClick={() => setIsProjectSettingsOpen(false)}
+              />
+              <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-[#1b1c20] shadow-[0_0_40px_rgba(0,0,0,0.2)] z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                <div className="flex items-center justify-between p-6">
+                  <h3 className="text-white font-semibold">Project Settings</h3>
+                  <button onClick={() => setIsProjectSettingsOpen(false)} className="text-[#8c8f99] hover:text-white"><X size={20} /></button>
+                </div>
+                <div className="px-6 space-y-4">
+                  <div className="rounded-xl bg-[#2a2c31] p-3">
+                    <p className="text-xs text-slate-300 mb-1">Project ID</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm text-white break-all">{selectedProject.id}</p>
+                      <button onClick={() => copyText(selectedProject.id)} className="text-xs text-blue-300">Copy</button>
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-[#2a2c31] p-3">
+                    <p className="text-xs text-slate-300 mb-1">Team ID</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm text-white break-all">{selectedTeamId || "Chưa chọn team"}</p>
+                      {selectedTeamId && <button onClick={() => copyText(selectedTeamId)} className="text-xs text-blue-300">Copy</button>}
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-[#2a2c31] p-3">
+                    <p className="text-xs text-slate-300 mb-1">Team Token</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm text-white break-all">{teamToken || "Chưa có token (chọn team trước)"}</p>
+                      {teamToken && <button onClick={() => copyText(teamToken)} className="text-xs text-blue-300">Copy</button>}
                     </div>
                   </div>
                 </div>

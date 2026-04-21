@@ -3,9 +3,11 @@
 import AuthShell from "@/components/auth/AuthShell";
 import { API_BASE_URL } from "@/lib/api";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
 export default function ResetPasswordPage() {
+  const router = useRouter();
   const [token, setToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -32,6 +34,9 @@ export default function ResetPasswordPage() {
       if (!res.ok) throw new Error(data.detail || "Có lỗi xảy ra.");
       setMessage(data.message);
       setNewPassword("");
+      setTimeout(() => {
+        router.push("/login");
+      }, 1200);
     } catch (err: any) {
       setError(err.message);
     } finally {
