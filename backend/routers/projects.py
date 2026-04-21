@@ -60,8 +60,13 @@ def create_project(data: models.ProjectCreateReq, db: Session = Depends(get_db),
              # Cấu hình thư viện Hugging Face InferenceClient
              client = InferenceClient(token=api_key)
              
-             # Khởi tạo câu Prompt
-             prompt = f"Write a creative fiction novel chapter based on the following.\nTitle: {data.title}\nInstruction: {data.prompt}\n\nChapter Content:\n"
+             # Khởi tạo câu Prompt tiếng Việt
+             prompt = (
+                 "Hãy viết một chương truyện sáng tạo bằng tiếng Việt dựa trên thông tin sau.\n"
+                 f"Tiêu đề: {data.title}\n"
+                 f"Yêu cầu: {data.prompt}\n\n"
+                 "Nội dung chương:\n"
+             )
              
              # Gửi request lên Hugging Face (Model: Qwen2.5-72B-Instruct - ổn định, văn phong mượt, rất tốt cho tiểu thuyết)
              # Vòng lặp chờ model khởi động (Cold-start)
@@ -69,7 +74,13 @@ def create_project(data: models.ProjectCreateReq, db: Session = Depends(get_db),
              for attempt in range(max_retries):
                  try:
                      messages = [
-                         {"role": "system", "content": "You are a creative author specializing in fiction novels."},
+                         {
+                             "role": "system",
+                             "content": (
+                                 "Bạn là nhà văn chuyên sáng tác truyện hư cấu. "
+                                 "Luôn trả lời bằng tiếng Việt tự nhiên, mạch lạc, giàu hình ảnh."
+                             ),
+                         },
                          {"role": "user", "content": prompt}
                      ]
                      

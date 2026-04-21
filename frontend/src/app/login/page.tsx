@@ -1,8 +1,10 @@
-"use client"; // Client Component để xử lý State và Form
+"use client";
 
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import AuthShell from "@/components/auth/AuthShell";
+import { API_BASE_URL } from "@/lib/api";
 
 export default function LoginPage() {
     const router = useRouter(); // Dùng để chuyển hướng trang
@@ -37,7 +39,7 @@ export default function LoginPage() {
             formData.append("is_remember", rememberMe.toString()); // Bắn luôn thông số này chọc xuống Database
 
             // Gửi HTTP POST request sang Backend API
-            const res = await fetch("http://127.0.0.1:8000/api/auth/login", {
+            const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
                 method: "POST",
                 headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 body: formData,
@@ -73,117 +75,42 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="flex min-h-screen bg-white">
-            {/* LEFT SIDE - 30% Secondary Color Area (Image + Overlay) - Giữ đồng bộ 100% với Register */}
-            <div className="hidden lg:flex lg:w-5/12 relative bg-blue-900 text-white flex-col justify-between overflow-hidden p-12">
-                {/* Gradient background */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-900 via-slate-800 to-slate-900 z-0 opacity-90"></div>
-                {/* Pattern overlay */}
-                <div
-                    className="absolute inset-0 z-0 mix-blend-overlay opacity-30"
-                    style={{ backgroundImage: 'radial-gradient(circle at center, #ffffff 1px, transparent 1px)', backgroundSize: '24px 24px' }}
-                ></div>
-
-                <div className="relative z-10 font-bold text-2xl tracking-tight">
-                    <span className="text-blue-400">AI</span> Generator
+        <AuthShell
+            title="Welcome back"
+            subtitle="Đăng nhập để tiếp tục làm việc với AI Workspace"
+            quote="Build, iterate, and ship your stories with AI."
+            author="AI Generator Team"
+            role="Creative Platform"
+        >
+            <form onSubmit={handleLogin} className="space-y-5" autoComplete="off">
+                {error && <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
+                <div>
+                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-400" htmlFor="email">Email</label>
+                    <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                        placeholder="you@gmail.com" autoComplete="off" />
                 </div>
-
-                <div className="relative z-10 mb-8">
-                    <blockquote className="text-3xl font-bold leading-tight mb-6">
-                        "Welcome back! Let's continue building great content together."
-                    </blockquote>
-                    <div className="text-sm">
-                        <div className="font-semibold text-white">System Admin</div>
-                        <div className="text-slate-300">AI Generator Platform</div>
+                <div>
+                    <div className="mb-1.5 flex items-center justify-between">
+                        <label className="text-xs uppercase tracking-wider text-slate-400" htmlFor="password">Password</label>
+                        <Link href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300">Forgot password?</Link>
                     </div>
+                    <input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                        placeholder="••••••••" autoComplete="new-password" />
                 </div>
-            </div>
-
-            {/* RIGHT SIDE - 60% Primary Area (Form) + 10% Accent (Buttons) */}
-            <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 md:px-24 lg:px-32 xl:px-48 relative">
-                <div className="w-full max-w-md mx-auto">
-                    <div className="text-center mb-10">
-                        <h1 className="text-3xl font-extrabold text-slate-900 mb-3 tracking-tight">Welcome back</h1>
-                        <p className="text-slate-500 font-medium">Log in to your account to continue creating.</p>
-                    </div>
-
-                    <form onSubmit={handleLogin} className="space-y-6" autoComplete="off">
-                        {error && (
-                            <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg font-medium border border-red-100">
-                                {error}
-                            </div>
-                        )}
-
-                        <div>
-                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2" htmlFor="email">
-                                Email
-                            </label>
-                            <input
-                                id="email"
-                                type="email"
-                                required
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-colors placeholder-slate-400 text-slate-900 font-medium bg-slate-50"
-                                placeholder="alex.jordan@gmail.com"
-                                autoComplete="off"
-                            />
-                        </div>
-
-                        <div>
-                            <div className="flex justify-between items-center mb-2">
-                                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-widest" htmlFor="password">
-                                    Password
-                                </label>
-                                <Link href="#" className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors">
-                                    Forgot password?
-                                </Link>
-                            </div>
-                            <input
-                                id="password"
-                                type="password"
-                                required
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-colors placeholder-slate-400 text-slate-900 font-medium bg-slate-50"
-                                placeholder="••••••••"
-                                autoComplete="new-password"
-                            />
-                        </div>
-
-                        {/* Remember Me Checkbox */}
-                        <div className="flex items-center">
-                            <input
-                                id="remember-me"
-                                type="checkbox"
-                                checked={rememberMe}
-                                onChange={(e) => {
-                                    setRememberMe(e.target.checked);
-                                }}
-                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded cursor-pointer"
-                            />
-                            <label htmlFor="remember-me" className="ml-2 block text-sm font-medium text-slate-700 cursor-pointer">
-                                Remember me
-                            </label>
-                        </div>
-
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600 disabled:opacity-70 disabled:cursor-not-allowed mt-4"
-                        >
-                            {loading ? "Logging in..." : "Log in"}
-                        </button>
-                    </form>
-
-                    <p className="mt-8 text-center text-sm font-medium text-slate-500">
-                        Don't have an account?{" "}
-                        <Link href="/register" className="text-blue-600 hover:text-blue-700 font-bold transition-colors">
-                            Sign up
-                        </Link>
-                    </p>
-                </div>
-            </div>
-        </div>
+                <label className="flex items-center gap-2 text-sm text-slate-300">
+                    <input id="remember-me" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="h-4 w-4 rounded border-slate-600 bg-slate-900" />
+                    Remember me
+                </label>
+                <button type="submit" disabled={loading}
+                    className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60">
+                    {loading ? "Logging in..." : "Log in"}
+                </button>
+            </form>
+            <p className="mt-6 text-center text-sm text-slate-400">
+                Chưa có tài khoản? <Link href="/register" className="font-semibold text-blue-400 hover:text-blue-300">Đăng ký</Link>
+            </p>
+        </AuthShell>
     );
 }

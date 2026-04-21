@@ -7,6 +7,10 @@ from database import get_db
 import models
 import os
 from datetime import datetime, timedelta
+from email.message import EmailMessage
+import smtplib
+import secrets
+from zoneinfo import ZoneInfo
 from jose import jwt, JWTError
 from dotenv import load_dotenv
 
@@ -77,6 +81,34 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
+def send_reset_email(email: str, reset_token: str):
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    frontend_url = os.getenv("FRONTEND_BASE_URL", "http://127.0.0.1:3000")
+
+    if not smtp_user or not smtp_password:
+        print("SMTP_USER/SMTP_PASSWORD chưa được cấu hình, bỏ qua gửi mail reset.")
+        return
+
+    reset_url = f"{frontend_url}/reset-password?token={reset_token}"
+    msg = EmailMessage()
+    msg["Subject"] = "Reset your AI Generator password"
+    msg["From"] = smtp_user
+    msg["To"] = email
+    msg.set_content(
+        f"Bạn vừa yêu cầu đặt lại mật khẩu.\n"
+        f"Bấm vào link sau để đổi mật khẩu: {reset_url}\n"
+        f"Link có hiệu lực trong 30 phút."
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        server.send_message(msg)
+
 @router.post("/login")
 def login_user(form_data: OAuth2PasswordRequestForm = Depends(), is_remember: bool = Form(False), db: Session = Depends(get_db)):
     """
@@ -111,6 +143,62 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), is_remember: bo
             "email": db_user.email
         }
     }
+
+
+@router.post("/forgot-password")
+def forgot_password(data: models.ForgotPasswordRequest, db: Session = Depends(get_db)):
+    db_user = db.query(models.User).filter(models.User.email == data.email).first()
+
+    # Trả generic message để tránh lộ thông tin email tồn tại hay không.
+    generic_msg = {"message": "Nếu email tồn tại, chúng tôi đã gửi link đặt lại mật khẩu."}
+    if not db_user:
+        return generic_msg
+
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(ZoneInfo("UTC")) + timedelta(minutes=30)
+
+    reset_token = models.PasswordResetToken(
+        user_id=db_user.id,
+        token=token,
+        expires_at=expires_at,
+    )
+    db.add(reset_token)
+    db.commit()
+
+    try:
+        send_reset_email(db_user.email, token)
+    except Exception as e:
+        print(f"Lỗi gửi reset mail: {e}")
+
+    return generic_msg
+
+
+@router.post("/reset-password")
+def reset_password(data: models.ResetPasswordRequest, db: Session = Depends(get_db)):
+    reset_token = (
+        db.query(models.PasswordResetToken)
+        .filter(models.PasswordResetToken.token == data.token)
+        .first()
+    )
+
+    if not reset_token:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token không hợp lệ.")
+    if reset_token.used_at is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token đã được sử dụng.")
+    if reset_token.expires_at < datetime.now(ZoneInfo("UTC")):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Token đã hết hạn.")
+    if len(data.new_password) < 8:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mật khẩu mới tối thiểu 8 ký tự.")
+
+    db_user = db.query(models.User).filter(models.User.id == reset_token.user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy người dùng.")
+
+    db_user.password_hash = get_password_hash(data.new_password)
+    reset_token.used_at = datetime.now(ZoneInfo("UTC"))
+    db.commit()
+
+    return {"message": "Đổi mật khẩu thành công. Vui lòng đăng nhập lại."}
 
 # ==========================================
 # BẢO VỆ API (PROTECTED ROUTES)

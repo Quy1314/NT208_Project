@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { API_BASE_URL } from "@/lib/api";
 import {
   MessageSquare,
   Settings,
@@ -14,7 +15,8 @@ import {
   ArrowUp,
   LayoutDashboard,
   Sparkles,
-  ChevronDown
+  ChevronDown,
+  X
 } from "lucide-react";
 
 interface Project {
@@ -36,17 +38,43 @@ export default function DashboardPage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false); // Ngăn chặn Double-Submit (Race Conditions)
+  const [modelName, setModelName] = useState("Qwen/Qwen2.5-72B-Instruct");
+  const [creativity, setCreativity] = useState("Balanced");
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [userProfile, setUserProfile] = useState<{ id: string; email: string; created_at: string } | null>(null);
+
+  const fetchUserProfile = async () => {
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    if (!token || token === "undefined" || token === "null") return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUserProfile(data);
+        setIsProfileOpen(true);
+        setIsUserMenuOpen(false); 
+      } else if (res.status === 401) {
+        handleLogout();
+      }
+    } catch (e) {
+      console.error("Failed to fetch user profile", e);
+    }
+  };
 
   const fetchProjects = async () => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
-    if (!token) return;
+    if (!token || token === "undefined" || token === "null") return;
     try {
-      const res = await fetch("http://localhost:8000/api/projects/", {
+      const res = await fetch(`${API_BASE_URL}/api/projects/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
         setProjects(data);
+      } else if (res.status === 401) {
+        handleLogout();
       }
     } catch (e) {
       console.error("Failed to fetch projects", e);
@@ -56,8 +84,8 @@ export default function DashboardPage() {
   useEffect(() => {
     // Auth check (Ưu tiên localStorage, nếu không có thì tìm trong sessionStorage)
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
-    if (!token) {
-      router.push("/login"); // Nếu không có token nào, đá văng ra login
+    if (!token || token === "undefined" || token === "null") {
+      handleLogout(); // Nếu không có token nào, đá văng ra login
       return;
     }
 
@@ -79,13 +107,15 @@ export default function DashboardPage() {
   const handleSelectProject = async (id: string) => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     try {
-      const res = await fetch(`http://localhost:8000/api/projects/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
         setSelectedProject(data);
         setIsCreating(false);
+      } else if (res.status === 401) {
+        handleLogout();
       }
     } catch (e) {
       console.error(e);
@@ -97,13 +127,15 @@ export default function DashboardPage() {
     if (!confirm("Bạn có chắc muốn xoá dự án này không?")) return;
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     try {
-      const res = await fetch(`http://localhost:8000/api/projects/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         if (selectedProject?.id === id) setSelectedProject(null);
         fetchProjects();
+      } else if (res.status === 401) {
+        handleLogout();
       }
     } catch (e) {
       console.error(e);
@@ -111,10 +143,13 @@ export default function DashboardPage() {
   };
 
   const handleCreateProject = async () => {
-    if (!title.trim() || !prompt.trim()) {
-      alert("Vui lòng nhập cả Tiêu đề và Prompt.");
+    if (!prompt.trim()) {
+      alert("Vui lòng nhập Prompt để AI tạo nội dung.");
       return;
     }
+
+    // Tự động tạo Title từ Prompt nếu người dùng không nhập
+    const finalTitle = title.trim() ? title : (prompt.trim().slice(0, 30) + (prompt.length > 30 ? "..." : ""));
 
     // Ngăn chặn race condition (click liên tục 2 lần)
     if (isGenerating) return;
@@ -122,13 +157,13 @@ export default function DashboardPage() {
     setIsGenerating(true);
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     try {
-      const res = await fetch("http://localhost:8000/api/projects/", {
+      const res = await fetch(`${API_BASE_URL}/api/projects/`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ title, prompt })
+        body: JSON.stringify({ title: finalTitle, prompt })
       });
       if (res.ok) {
         const data = await res.json();
@@ -137,6 +172,8 @@ export default function DashboardPage() {
         setIsCreating(false);
         setSelectedProject(data);
         fetchProjects();
+      } else if (res.status === 401) {
+        handleLogout();
       } else {
         alert("Có lỗi xảy ra khi tạo dự án.");
       }
@@ -147,18 +184,15 @@ export default function DashboardPage() {
     }
   };
 
-  const handleLogout = () => {
+  function handleLogout() {
     // Quét dọn sạch sẽ tất cả session & local storage (trừ cái remembered_email)
     localStorage.removeItem("access_token");
     localStorage.removeItem("user_email");
     sessionStorage.removeItem("access_token");
     sessionStorage.removeItem("user_email");
 
-    // Dùng window.location.href thay vì router.push để XÓA SẠCH CACHE của NextJS Router
-    // Điều này đảm bảo trang /login được load mới hoàn toàn, input form không bị dính chữ cũ
-    window.location.href = "/login";
-  };
-
+    window.location.href = "/logout";
+  }
   return (
     <div className="flex h-screen bg-slate-100 p-2 sm:p-4 font-sans text-slate-900">
       {/* MAIN APP CONTAINER */}
@@ -171,7 +205,7 @@ export default function DashboardPage() {
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white shadow-sm">
               <Sparkles size={16} />
             </div>
-            <span className="font-bold text-lg tracking-tight">AI Generator</span>
+            <span className="font-bold text-lg tracking-tight">AI Assistant</span>
           </div>
 
           {/* New Project Button */}
@@ -253,7 +287,9 @@ export default function DashboardPage() {
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Signed in as</p>
                     <p className="text-sm font-bold text-slate-900 truncate">{userEmail}</p>
                   </div>
-                  <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors">
+                  <button
+                    onClick={fetchUserProfile}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 hover:text-blue-600 transition-colors">
                     <User size={16} />
                     User Profile
                   </button>
@@ -303,17 +339,8 @@ export default function DashboardPage() {
             ) : isCreating ? (
               <div className="max-w-3xl mx-auto pt-10 px-4 h-full flex flex-col justify-center">
                 <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">Create New Project</h2>
-                <p className="text-slate-500 font-medium mb-10">Define your title and instruct the AI with a prompt.</p>
-
-                <div className="mb-6">
-                  <label className="block text-sm font-bold text-slate-700 mb-2 pl-1">Project Title</label>
-                  <input
-                    value={title}
-                    onChange={e => setTitle(e.target.value)}
-                    placeholder="e.g., A sci-fi novel about Mars"
-                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-slate-800 shadow-sm"
-                  />
-                </div>
+                <p className="text-slate-500 font-medium mb-10">Instruct the AI to generate a creative story below.</p>
+                {/* Ẩn cục bộ form nhập Title gốc đi, vì giờ đã Auto-generate từ Prompt ở dưới */}
               </div>
             ) : (
               <div className="max-w-4xl mx-auto h-full flex flex-col justify-center items-center pt-10 lg:pt-20">
@@ -334,35 +361,59 @@ export default function DashboardPage() {
             )}
           </main>
 
-          {/* BOTTOM PROMPT INPUT */}
+          { }
           {isCreating && (
-            <div className="absolute bottom-0 left-0 w-full p-4 lg:p-8 bg-gradient-to-t from-white via-white to-transparent">
-              <div className="max-w-3xl mx-auto bg-white border border-slate-200 shadow-sm rounded-2xl p-2 focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 transition-all">
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[95%] sm:w-[85%] max-w-4xl z-30">
+              <div className="bg-[#1b1c20] border border-[#2a2c31] shadow-[0_10px_40px_rgba(0,0,0,0.5)] rounded-3xl p-3 flex flex-col gap-2 transition-all">
+
+                {/* Input Area */}
                 <textarea
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Describe your story, characters, and plot here..."
-                  className="w-full max-h-32 min-h-[60px] p-3 text-slate-800 focus:outline-none resize-none placeholder-slate-400 bg-transparent font-medium"
+                  className="w-full max-h-32 min-h-[60px] p-3 text-[#f3f4f6] focus:outline-none resize-none placeholder-[#6b7280] bg-transparent font-medium"
                 />
-                <div className="flex items-center justify-between pt-2 px-2 pb-1 border-t border-slate-50">
-                  <button className="flex items-center gap-2 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors">
-                    Select Source <ChevronDown size={14} />
-                  </button>
+
+                {/* Tools & Generate Button Bar */}
+                <div className="flex items-center justify-between pt-1 px-2 border-t border-[#2a2c31]/50 mt-1">
 
                   <div className="flex items-center gap-2">
-                    <button className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 px-2 py-1.5 transition-colors">
+                    <select
+                      value={modelName}
+                      onChange={(e) => setModelName(e.target.value)}
+                      className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg"
+                    >
+                      <option>Qwen/Qwen2.5-72B-Instruct</option>
+                      <option>meta-llama/Llama-3.1-70B-Instruct</option>
+                      <option>mistralai/Mixtral-8x7B-Instruct-v0.1</option>
+                    </select>
+                    <select
+                      value={creativity}
+                      onChange={(e) => setCreativity(e.target.value)}
+                      className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg"
+                    >
+                      <option>Focused</option>
+                      <option>Balanced</option>
+                      <option>Creative</option>
+                    </select>
+                  </div>
+
+                  {/* Right: Original Tools & Generate */}
+                  <div className="flex items-center gap-2">
+                    <button className="flex items-center gap-1.5 text-xs font-semibold text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31] px-2 py-1.5 rounded-lg transition-colors">
                       <Paperclip size={14} /> Attach
                     </button>
-                    <button className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 px-2 py-1.5 transition-colors">
+                    <button className="flex items-center gap-1.5 text-xs font-semibold text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31] px-2 py-1.5 rounded-lg transition-colors">
                       <Mic size={14} /> Voice
                     </button>
+
                     <button
                       onClick={handleCreateProject}
                       disabled={isGenerating}
-                      className={`flex items-center gap-1.5 text-xs font-bold text-white px-4 py-2 rounded-xl transition-all shadow-sm ml-2 ${isGenerating ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                      className={`flex items-center gap-1.5 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all shadow-md ml-2 ${isGenerating ? 'bg-indigo-500/50 cursor-not-allowed' : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 hover:shadow-lg'}`}>
                       {isGenerating ? (
                         <>
-                          <div className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
+                          <div className="w-4 h-4 rounded-full border-2 border-white/80 border-t-transparent animate-spin"></div>
                           Generating...
                         </>
                       ) : (
@@ -374,11 +425,62 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
-              <div className="text-center mt-3 text-[10px] text-slate-400 font-medium">
+              <div className="text-center mt-3 text-[10px] text-slate-400 font-medium font-sans">
                 AI may display inaccurate info, so please double check the response.
               </div>
             </div>
           )}
+
+          { }
+          {isProfileOpen && (
+            <>
+              {/* Backdrop Overlay */}
+              <div
+                className="absolute inset-0 bg-slate-900/20 backdrop-blur-[2px] z-40 animate-in fade-in"
+                onClick={() => setIsProfileOpen(false)}
+              ></div>
+
+              {/* Sliding Dark Panel */}
+              <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-[#1b1c20] shadow-[0_0_40px_rgba(0,0,0,0.2)] z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                <div className="flex items-center p-6 border-b border-transparent">
+                  <button onClick={() => setIsProfileOpen(false)} className="text-[#8c8f99] hover:text-white transition-colors p-1 -ml-1">
+                    <X size={20} strokeWidth={1.5} />
+                  </button>
+                </div>
+
+                <div className="px-8 flex-1 flex flex-col gap-6 overflow-y-auto pb-10">
+                  <div>
+                    <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">ID</label>
+                    <div className="w-full bg-[#2a2c31] rounded-xl px-4 py-3.5 text-[14px] font-medium text-[#f3f4f6]">
+                      {userProfile?.id}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">Nickname</label>
+                    <div className="w-full bg-[#2a2c31] rounded-xl px-4 py-3.5 text-[14px] font-medium text-[#f3f4f6]">
+                      {userProfile?.email.split('@')[0]}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">Email</label>
+                    <div className="w-full bg-[#2a2c31] rounded-xl px-4 py-3.5 text-[14px] font-medium text-[#f3f4f6]">
+                      {userProfile?.email}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">Created At</label>
+                    <div className="w-full bg-[#2a2c31] rounded-xl px-4 py-3.5 text-[14px] font-medium text-[#f3f4f6]">
+                      {userProfile?.created_at ? new Date(userProfile.created_at).toLocaleString('vi-VN') : 'N/A'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
         </div>
       </div>
     </div>
