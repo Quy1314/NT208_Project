@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, Text, ForeignKey, TIMESTAMP, Boolean
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 import uuid
@@ -26,6 +27,8 @@ class Project(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
+    context_entries = relationship("ProjectContextEntry", back_populates="project")
+
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
@@ -46,6 +49,8 @@ class ProjectContextEntry(Base):
     language = Column(String(20), nullable=False, server_default="vietnamese")
     generated_content = Column(Text, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    project = relationship("Project", back_populates="context_entries")
 
 
 class TeamWorkspace(Base):
@@ -106,10 +111,12 @@ class ProjectCreateReq(BaseModel):
     title: str
     prompt: str
     language: Literal["vietnamese", "english"] = "vietnamese"
+    model_name: str | None = None  # Hugging Face Inference model id (optional)
 
 class ProjectContinueReq(BaseModel):
     prompt: str
     language: Literal["vietnamese", "english"] = "vietnamese"
+    model_name: str | None = None
 
 class ProjectResponse(BaseModel):
     id: str
@@ -119,3 +126,16 @@ class ProjectResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class ExportTranslateReq(BaseModel):
+    title: str
+    prompt: str
+    content: str
+    mode: Literal["vi-to-en", "en-to-vi"]
+
+
+class ExportTranslateResp(BaseModel):
+    title: str
+    prompt: str
+    content: str

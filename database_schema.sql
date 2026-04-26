@@ -110,6 +110,22 @@ CREATE TABLE IF NOT EXISTS projects (
     deleted_at TIMESTAMPTZ
 );
 
+-- Lịch sử từng lượt sinh nội dung (đồng bộ backend SQLAlchemy: project_context_entries).
+-- ON DELETE CASCADE: xóa project thì xóa hết dòng context phụ thuộc.
+CREATE TABLE IF NOT EXISTS project_context_entries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    prompt TEXT NOT NULL,
+    language VARCHAR(20) NOT NULL DEFAULT 'vietnamese',
+    generated_content TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Nếu bảng đã tạo trước đó mà thiếu CASCADE trên FK, chạy tay:
+-- ALTER TABLE project_context_entries DROP CONSTRAINT IF EXISTS project_context_entries_project_id_fkey;
+-- ALTER TABLE project_context_entries ADD CONSTRAINT project_context_entries_project_id_fkey
+--   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
+
 CREATE TABLE IF NOT EXISTS project_members (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -302,6 +318,8 @@ CREATE INDEX IF NOT EXISTS idx_projects_deleted_at ON projects(deleted_at);
 
 CREATE INDEX IF NOT EXISTS idx_project_members_project_id ON project_members(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_project_context_entries_project_id ON project_context_entries(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_context_entries_created_at ON project_context_entries(project_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_project_chapters_project_id ON project_chapters(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_versions_project_id ON project_versions(project_id);
