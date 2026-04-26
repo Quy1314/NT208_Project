@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
 import models
 import auth
-from routers import projects, teams
+from routers import storyRouter, teams
 from sqlalchemy import text
 
 # Tạo sẵn toàn bộ bảng trong database (dựa trên các classes ở models.py) nếu chưa tồn tại
@@ -81,7 +81,7 @@ async def anti_spam_middleware(request: Request, call_next):
 
 # Gắn các router con
 app.include_router(auth.router)
-app.include_router(projects.router)
+app.include_router(storyRouter.storyRouter)
 app.include_router(teams.router)
 
 @app.get("/")
