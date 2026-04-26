@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { API_BASE_URL } from "@/lib/api";
 import { downloadMarkdown, downloadPdf, downloadWord } from "@/lib/exportProject";
 import { clearPersonalHfApiKey, getPersonalHfApiKey, setPersonalHfApiKey } from "@/lib/personalHf";
 import { TranslationMode, translateProjectForExport } from "@/lib/translateForExport";
+import { getTemplatePromptById } from "@/lib/landingTemplates";
 import {
   MessageSquare,
   Settings,
@@ -47,6 +49,16 @@ const HF_MODEL_OPTIONS: string[] = [
   "mistralai/Mistral-7B-Instruct-v0.3",
 ];
 
+/** Model ảnh free phổ biến trên Hugging Face (tham khảo để dùng với endpoint text-to-image). */
+const HF_IMAGE_MODEL_OPTIONS: string[] = [
+  "black-forest-labs/FLUX.1-dev",
+  "stabilityai/stable-diffusion-xl-base-1.0",
+  "runwayml/stable-diffusion-v1-5",
+  "Lykon/DreamShaper",
+  "SG161222/Realistic_Vision_V6.0_B1_noVAE",
+  "prompthero/openjourney",
+];
+
 interface Project {
   id: string;
   title: string;
@@ -61,6 +73,7 @@ interface TeamWorkspace {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -159,6 +172,16 @@ export default function DashboardPage() {
   useEffect(() => {
     setPersonalHfKeyActive(Boolean(getPersonalHfApiKey()));
   }, []);
+
+  useEffect(() => {
+    const templateId = searchParams.get("template");
+    const templatePrompt = getTemplatePromptById(templateId);
+    if (!templatePrompt) return;
+    setIsCreating(true);
+    setSelectedProject(null);
+    setPrompt(templatePrompt);
+    setTitle((prev) => prev || "AI Template Draft");
+  }, [searchParams]);
 
   useEffect(() => {
     if (!HF_MODEL_OPTIONS.includes(modelName)) {
@@ -530,12 +553,12 @@ export default function DashboardPage() {
           isDark ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-100"
         }`}>
           {/* Logo Area */}
-          <div className="flex items-center gap-3 px-2 mb-8">
+          <Link href="/" className="flex items-center gap-3 px-2 mb-8 rounded-lg hover:bg-slate-800/40 transition-colors">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white shadow-sm">
               <Sparkles size={16} />
             </div>
             <span className={`font-bold text-lg tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>AI Assistant</span>
-          </div>
+          </Link>
 
           {/* New Project Button */}
           <button
@@ -653,6 +676,16 @@ export default function DashboardPage() {
             </div>
             <div className="hidden md:flex items-center gap-4">
               {/* Breadcrumbs / Top Actions can go here */}
+              <Link
+                href="/"
+                className={`text-sm font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+                  isDark
+                    ? "text-cyan-200 border-cyan-500/40 bg-slate-800 hover:bg-slate-700"
+                    : "text-cyan-700 border-cyan-200 bg-cyan-50 hover:bg-cyan-100"
+                }`}
+              >
+                Trang chủ
+              </Link>
               <span className={`text-sm font-semibold px-3 py-1.5 rounded-full ${isDark ? "text-slate-100 bg-slate-800" : "text-slate-800 bg-slate-100"}`}>Test  GPT Plus</span>
             </div>
 
@@ -1049,6 +1082,20 @@ export default function DashboardPage() {
                   <p className="text-[11px] text-[#6b7280] leading-relaxed">
                     Model khi sinh nội dung chỉ được chọn trong <strong className="text-[#9ca3af]">dropdown trên thanh chat</strong> (danh sách đã cài đặt). Token HF cá nhân chỉ thay key gọi API; không có token thì server dùng key mặc định (nếu có).
                   </p>
+                  <div className="rounded-xl border border-[#32353d] bg-[#111317] p-3">
+                    <p className="text-[11px] font-semibold text-[#cdd0d5] mb-2">Model ảnh free gợi ý (Hugging Face)</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {HF_IMAGE_MODEL_OPTIONS.map((id) => (
+                        <span
+                          key={id}
+                          className="rounded-md bg-[#2a2c31] px-2 py-1 text-[10px] font-mono text-[#d1d5db]"
+                          title={id}
+                        >
+                          {id}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </>

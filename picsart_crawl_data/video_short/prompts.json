@@ -1,0 +1,86 @@
+[
+  {
+    "category": "video_short",
+    "model_mode": "Veo 3.1Text→Video",
+    "prompt_text": "A majestic white horse running gracefully along the shoreline of a beach during sunset. The scene is highly realistic and cinematic, with detailed muscle movement visible beneath the horse's coat as it gallops in a controlled, powerful motion. Its mane and tail flow naturally in the ocean breeze. The beach is expansive and realistic — wet sand reflecting the warm golden-orange sky, gentle waves rolling in with detailed water physics, soft sea foam forming at the shore. Each hoof strike creates subtle splashes and sand displacement, leaving clear hoofprints behind. The sunset is dramatic and breathtaking — golden, orange, and soft pink hues blending into the sky, with realistic cloud formations catching the last light of the day. The lighting is natural and cinematic, warm rim light outlining the horse's silhouette, long shadows stretching across the sand. Camera movement: smooth tracking shot parallel to the horse at mid-level height, stabilized and fluid. Occasional slow-motion moments as the horse runs through shallow water. Shallow depth of field during close-ups, wide-angle lens for scenic shots showing the vast ocean horizon. Ultra-realistic textures, 4K resolution, physically accurate lighting, natural color grading, high dynamic range, subtle cinematic film grain, shot on ARRI Alexa style, immersive movie-quality scene, emotionally powerful and captivating.",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Veo 3.1 FastText→Video",
+    "prompt_text": "A single emperor penguin is walking away from the camera across a vast Antarctic snowfield. The camera is positioned at a low angle behind the penguin, slowly tracking forward. The penguin leaves clearly defined, realistic footprints in the compacted snow, with visible texture and slight snow displacement at each step. Its feathers move subtly in the cold wind. The snow surface shows natural variations — small drifts, wind-sculpted ridges, and subtle shadows. In the far distance, a massive, sharply pointed, snow-covered mountain rises prominently against the horizon. The mountain has realistic rock texture partially visible beneath ice and snow. The lighting is natural and physically accurate — low-angle polar sunlight coming from behind the mountain, creating soft rim light around the penguin and long shadows across the snow. Atmospheric perspective adds slight haze around the distant peak. The sky is dramatic and overcast, filled with dense, dark polar storm clouds, with breaks allowing soft beams of diffused sunlight to pass through. Subtle wind blows loose snow particles across the ground. Shot in cinematic, ultra-realistic style, 4K resolution, high dynamic range, natural color grading, shallow depth of field, 85mm lens, realistic motion, documentary wildlife cinematography.",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Grok T2VText→Video",
+    "prompt_text": "A vibrant, bright yellow hummingbird, possibly a canary, with an orange beak and subtle blue markings on its face and wing, is meticulously perched amidst lush, dewy green foliage. Clusters of small, delicate flowers in shades of pink, light blue, and muted yellow are interspersed throughout the dense leaves. The composition is a close-up, featuring the bird as the central subject, while the background softly blurs into an atmospheric bokeh of dark green green and pastel floral tones. Soft, natural lighting illuminates the scene, highlighting the bird's brilliant plumage and the verdant textures, conveying a serene and naturalistic mood.",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Kling 2.6 ProText→Video",
+    "prompt_text": "A muscular African American basketball player, wearing a red jersey with number \"11\" and white trim, is captured mid-air in a dramatic dunk, a basketball held firmly in his right hand. He is illuminated by bright spotlights, his expression focused and intense. The shot is taken from a low angle, looking up towards the hoop and the player. The setting is a large, dark basketball arena, with a polished wooden court featuring red lines. Numerous spectators fill the tiered stands in the background, a blurred sea of excited faces, many raising their hands or waving white and red cloths, creating a dynamic, celebratory atmosphere. Bright stadium lights punctuate the dark upper sections of the arena, casting strong light rays and lens flares.",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Veo 3.1 FastText→Video",
+    "prompt_text": "A golden retriever runs joyfully through a sunlit wildflower meadow in slow motion. [0:00-0:02] Wide establishing shot, camera low to the ground — the dog bursts into frame, ears flapping, paws kicking up petals of purple and yellow wildflowers. [0:02-0:05] Tracking shot following alongside, shallow depth of field blurs the foreground flowers. [0:05-0:08] The dog leaps over a small stream, water droplets frozen in golden backlight, landing softly and shaking its coat. Anamorphic lens flare, warm sunset color grade, cinematic 4K.",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Kling 3.0 ProText→Video",
+    "prompt_text": "Cinematic FPV drone shot racing through neon-lit Tokyo streets on a rainy night. [0:00-0:02] Camera flies through a narrow alley, neon kanji signs reflecting in rain puddles on asphalt, steam rising from a ramen shop doorway. [0:02-0:04] Sharp turn through a crowded intersection — pedestrians with transparent umbrellas, massive LED billboards towering above casting teal and magenta light. [0:04-0:06] Camera rises vertically along a glass skyscraper, reflecting the city lights below, emerging above rooftops into misty clouds. Blade Runner aesthetic, volumetric fog, anamorphic bokeh.",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Sora 2 ProText→Video",
+    "prompt_text": "A master chef plates an exquisite dessert in a Michelin-star kitchen. [0:00-0:03] Overhead shot of a pristine white plate on polished steel — the chef's steady hands pipe a delicate chocolate ganache spiral with surgeon-like precision. [0:03-0:06] Close-up profile as the chef uses tweezers to place a gold-dusted raspberry, concentration visible on their face, kitchen staff blurred in background steam. [0:06-0:10] Pull-back reveal of the finished plate under a single warm spotlight, wisps of steam rising, then extreme close-up of the dessert surface texture. Documentary style, dramatic side lighting, shallow depth of field.",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Runway Gen4.5Text→Video",
+    "prompt_text": "Macro time-lapse of a peony bud slowly blooming in a photography studio. [0:00-0:03] Extreme close-up as the tightly closed bud begins to crack open, revealing deep pink petals unfurling with delicate veined texture. [0:03-0:06] Petals spread outward in graceful spirals, dewdrops rolling along the curves, pollen-dusted stamens emerging at the center. [0:06-0:10] Camera slowly pulls back as the fully opened bloom fills the frame, soft studio light creating translucent petal edges. Black background, shallow depth of field, smooth 120fps motion.",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Kling 3.0 ProText→Video",
+    "prompt_text": "A Formula 1 car tears down the straightaway, its black-and-orange chassis gleaming under a shifting overcast sky. The camera rides low, tracking the razor edge of the tarmac as the car rockets forward — the frame vibrating with tension and precision. The engine's roar dominates the soundscape, a mechanical symphony that seems to shake the air itself. In a sudden burst of energy, the camera executes a rapid push-in, closing the distance with sharp, cinematic precision. Every detail is heightened: the shimmer of heat ripples above the asphalt, the gleam of carbon fiber, and the minute reflections dancing across the bodywork. No smoke, no debris — just pure velocity and light. The focus tightens on the driver, hands gripping the wheel with surgical poise, helmet reflecting streaks of motion and sky. Motion blur sweeps across the barriers and curbs, transforming the track into a ribbon of kinetic color. The world bends around the machine as it surges toward the apex. The camera movement feels alive — perfectly synced with the car's rhythm, a blend of dolly and gimbal precision. Natural sunlight breaks briefly through the clouds, illuminating the car's contour in a golden accent before sliding back into cool daylight tones. The color grade shifts between deep metallic grays, amber highlights, and muted teals, balancing realism and drama. Captured on ARRI Alexa 65 with an anamorphic lens, the frame breathes with cinematic scale and natural lens flares. The depth of field isolates the driver from the blurred periphery, amplifying speed through spatial compression. The shot resolves in a single breathtaking instant: the car slicing past lens, light refracting through its polished shell, leaving only silence, vibration, and heat shimmer in its wake. No smoke. No theatrics. Just pure, disciplined speed — a moment of mechanical poetry, shot with the visual intensity of a Hollywood action feature and the precision of a luxury automotive commercial.",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Seedance 1.5 ProText→Video",
+    "prompt_text": "A deeply dramatic, ultra-cinematic close-up shot of a bee flying directly toward the camera through a dense forest at midday. The lighting is fully natural — muted, filtered through thick foliage, creating a soft, moody atmosphere with no artificial streaks or flares. Shadows from branches move across her body as she flies, giving the scene a grounded, documentary-level realism. The bee's wings beat at extremely high speed, becoming a subtle, natural blur — not flashy, just the true rapid vibration of insect flight. Her body stays sharply in focus, revealing fine textures: tiny hairs, earthy tones, flecks of natural dust. Her eyes glisten with soft ambient reflections from the forest around her. The camera holds a tight telephoto front-follow angle as she pushes forward with urgency. Foreground branches and leaves pass by in heavy, grounded motion parallax, not stylized streaks — just real elements sliding across frame as the bee cuts through them. Stray particles of forest dust swirl naturally in her wake. As she approaches, the camera makes a gentle push-in, keeping the bee centered as the forest behind collapses into a shallow, blurred backdrop of deep greens and earthy browns. Every movement feels tense, heavy, and alive — like a wildlife moment captured at the perfect second. Mood: dramatic, raw, grounded, intense. Style: hyper-real naturalism, cinematic but not stylized, atmospheric forest realism. Key elements: high-speed wing flutter, natural motion parallax, muted forest tones, grounded lighting, tight close-up approach shot, tense documentary-style energy.",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Grok T2VText→Video",
+    "prompt_text": "A breathtaking underwater coral reef ecosystem, colorful tropical fish swimming through vibrant coral formations, soft rays of sunlight piercing through the crystal clear blue water from above, schools of tiny fish moving in harmony, slow drifting sea particles, gentle ocean currents swaying coral and sea plants, a curious sea turtle gliding gracefully through the scene, cinematic underwater camera movement slowly drifting forward, ultra detailed coral textures, natural ocean lighting, volumetric light rays, peaceful and magical atmosphere, shallow depth of field, 8K cinematic quality, highly realistic nature documentary style, National Geographic level visuals",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Runway Gen4.5Text→Video",
+    "prompt_text": "A young man standing on the street, wearing black wide-leg blue jeans, a jean jacket, wearing silver chain neckless and rectangular sunglasses stands confidently on a Manhattan street, surrounded by tall buildings under a clear blue sky. The sunlight flares behind him, creating a dramatic lens glow. The camera faces him directly from a low angle, but the man is already seen from a far perspective, appearing small within the wide urban environment. The camera begins a perfectly smooth, slow, continuous zoom-out pullback while the subject is still visible, pullback is in a single unbroken shot. The man becomes smaller and smaller within the expanding urban landscape, emphasizing the scale of the city around him. The camera continues pulling back high above the city, revealing a vast panoramic view of Manhattan's dense grid of buildings and streets. The shot remains entirely within the city environment under the bright blue sky.",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Runway Gen4.5Text→Video",
+    "prompt_text": "Low-angle tracking shot of a skier carving through deep powder snow on a steep mountain slope. The camera is positioned close to the ground, following the skis as they cut through snow, creating a burst of snow particles. Bright sunlight, clear blue sky, rugged alpine peaks in the background. Fast motion, dynamic energy, realistic physics, cinematic sports footage, GoPro-style lens, slight motion blur, high detail, 4K.",
+    "source_url": "https://picsart.com/vi/create"
+  },
+  {
+    "category": "video_short",
+    "model_mode": "Veo 3.1Text→Video",
+    "prompt_text": "A cinematic scene of a man playing a white grand piano inside a vast gothic cathedral. The atmosphere is calm, emotional, and immersive. Soft blue ambient light fills the space, with warm chandelier light glowing in the background. Delicate crystal droplets hang from above, subtly shimmering. The man plays the piano gently and expressively, his movements smooth and natural, fingers softly gliding across the keys. His posture is relaxed and focused, conveying emotion through the music. The camera slowly begins a smooth lateral side movement (slow dolly shot), capturing the pianist from a slight angle and gradually revealing more of the grand hall. The motion is fluid, steady, and cinematic — no abrupt changes. Light rays softly pass through high windows, dust particles visible in the air. The glossy marble floor reflects the piano and lights. The entire scene feels serene, elegant, and emotionally captivating. Ultra-realistic, shallow depth of field, soft focus transitions, cinematic lighting, natural motion, 4K, film-style color grading.",
+    "source_url": "https://picsart.com/vi/create"
+  }
+]
