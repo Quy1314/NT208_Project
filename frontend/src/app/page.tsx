@@ -3,6 +3,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "@/lib/api";
+import { downloadMarkdown, downloadPdf, downloadWord } from "@/lib/exportProject";
+import { clearPersonalHfApiKey, getPersonalHfApiKey, setPersonalHfApiKey } from "@/lib/personalHf";
+import { TranslationMode, translateProjectForExport } from "@/lib/translateForExport";
 import {
   MessageSquare,
   Settings,
@@ -19,8 +22,30 @@ import {
   ChevronDown,
   X,
   Moon,
-  Sun
+  Sun,
+  FileDown,
+  KeyRound
 } from "lucide-react";
+
+function buildProjectRequestHeaders(token: string | null): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token && token !== "undefined" && token !== "null") {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const hf = getPersonalHfApiKey();
+  if (hf) headers["X-HF-Api-Key"] = hf;
+  return headers;
+}
+
+/** Các model Hugging Face được cài đặt trong app — user chỉ chọn qua dropdown, không nhập tay. */
+const HF_MODEL_OPTIONS: string[] = [
+  "Qwen/Qwen2.5-72B-Instruct",
+  "Qwen/Qwen2.5-7B-Instruct",
+  "meta-llama/Llama-3.1-70B-Instruct",
+  "meta-llama/Llama-3.2-3B-Instruct",
+  "mistralai/Mixtral-8x7B-Instruct-v0.1",
+  "mistralai/Mistral-7B-Instruct-v0.3",
+];
 
 interface Project {
   id: string;
@@ -42,6 +67,8 @@ export default function DashboardPage() {
   const [continuePrompt, setContinuePrompt] = useState("");
   const [title, setTitle] = useState("");
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const mainScrollRef = useRef<HTMLElement | null>(null);
+  const [isMainAtBottom, setIsMainAtBottom] = useState(true);
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -65,6 +92,14 @@ export default function DashboardPage() {
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [isDark, setIsDark] = useState(true);
+  const [exportingFormat, setExportingFormat] = useState<null | "md" | "pdf" | "docx">(null);
+  const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
+  const [exportFormatChoice, setExportFormatChoice] = useState<"md" | "pdf" | "docx">("md");
+  const [exportTranslationMode, setExportTranslationMode] = useState<TranslationMode>("none");
+  const [isPersonalizeOpen, setIsPersonalizeOpen] = useState(false);
+  const [personalizeKeyInput, setPersonalizeKeyInput] = useState("");
+  const [personalizeMessage, setPersonalizeMessage] = useState("");
+  const [personalHfKeyActive, setPersonalHfKeyActive] = useState(false);
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
@@ -122,6 +157,16 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    setPersonalHfKeyActive(Boolean(getPersonalHfApiKey()));
+  }, []);
+
+  useEffect(() => {
+    if (!HF_MODEL_OPTIONS.includes(modelName)) {
+      setModelName(HF_MODEL_OPTIONS[0]);
+    }
+  }, [modelName]);
+
+  useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme === "light") {
       setIsDark(false);
@@ -167,6 +212,33 @@ export default function DashboardPage() {
       fetchProjectTeamToken(selectedProject.id, selectedTeamId);
     }
   }, [isProjectSettingsOpen, selectedProject, selectedTeamId]);
+
+  const updateMainBottomFlag = React.useCallback(() => {
+    const el = mainScrollRef.current;
+    if (!el) return;
+    const thresholdPx = 80;
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setIsMainAtBottom(gap <= thresholdPx);
+  }, []);
+
+  useEffect(() => {
+    const showComposer = isCreating || Boolean(selectedProject);
+    if (!showComposer) return;
+
+    const el = mainScrollRef.current;
+    if (!el) return;
+
+    updateMainBottomFlag();
+    const onScroll = () => updateMainBottomFlag();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    const ro = new ResizeObserver(() => updateMainBottomFlag());
+    ro.observe(el);
+
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
+  }, [isCreating, selectedProject, selectedProject?.content, updateMainBottomFlag]);
 
   const handleSelectProject = async (id: string) => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
@@ -263,6 +335,45 @@ export default function DashboardPage() {
     }
   };
 
+  const handleExportProject = async (format: "md" | "pdf" | "docx", translationMode: TranslationMode = "none") => {
+    if (!selectedProject) return;
+    let { title, prompt, content } = selectedProject;
+    if (!content?.trim() || content === "Waiting for LLM generation...") {
+      alert("Chưa có nội dung AI để xuất.");
+      return;
+    }
+    setExportingFormat(format);
+    try {
+      if (translationMode !== "none") {
+        try {
+          const translated = await translateProjectForExport({ title, prompt, content }, translationMode);
+          title = translated.title;
+          prompt = translated.prompt;
+          content = translated.content;
+        } catch (translationErr) {
+          console.error("Translation before export failed:", translationErr);
+          const fallbackMsg =
+            translationErr instanceof Error
+              ? translationErr.message
+              : "Không gọi được translation API.";
+          alert(
+            `Không thể dịch trước khi export (${fallbackMsg}). Hệ thống sẽ xuất file gốc (không dịch).`
+          );
+        }
+      }
+      if (format === "md") downloadMarkdown(title, prompt, content);
+      else if (format === "docx") await downloadWord(title, prompt, content);
+      else await downloadPdf(title, prompt, content);
+      setIsExportPanelOpen(false);
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      alert(`Xuất file thất bại: ${msg}`);
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
   const handleCreateProject = async () => {
     if (!prompt.trim()) {
       alert("Vui lòng nhập Prompt để AI tạo nội dung.");
@@ -280,11 +391,8 @@ export default function DashboardPage() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/projects/`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ title: finalTitle, prompt, language })
+        headers: buildProjectRequestHeaders(token),
+        body: JSON.stringify({ title: finalTitle, prompt, language, model_name: modelName.trim() }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -318,11 +426,8 @@ export default function DashboardPage() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/continue`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ prompt: continuePrompt, language })
+        headers: buildProjectRequestHeaders(token),
+        body: JSON.stringify({ prompt: continuePrompt, language, model_name: modelName.trim() }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -347,9 +452,37 @@ export default function DashboardPage() {
     localStorage.removeItem("user_email");
     sessionStorage.removeItem("access_token");
     sessionStorage.removeItem("user_email");
+    clearPersonalHfApiKey();
 
     window.location.href = "/logout";
   }
+
+  const openPersonalize = () => {
+    setIsUserMenuOpen(false);
+    setPersonalizeKeyInput(getPersonalHfApiKey() || "");
+    setPersonalizeMessage("");
+    setIsPersonalizeOpen(true);
+  };
+
+  const savePersonalizeKey = () => {
+    const k = personalizeKeyInput.trim();
+    if (!k) {
+      clearPersonalHfApiKey();
+      setPersonalHfKeyActive(false);
+      setPersonalizeMessage("Đã xóa key HF cá nhân.");
+      return;
+    }
+    setPersonalHfApiKey(k);
+    setPersonalHfKeyActive(true);
+    setPersonalizeMessage("Đã lưu. Key chỉ dùng trong tab này, không lưu trên server.");
+  };
+
+  const clearPersonalizeKey = () => {
+    setPersonalizeKeyInput("");
+    clearPersonalHfApiKey();
+    setPersonalHfKeyActive(false);
+    setPersonalizeMessage("Đã xóa key HF cá nhân.");
+  };
 
   const handleChangePassword = async () => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
@@ -569,6 +702,21 @@ export default function DashboardPage() {
                     User Profile
                   </button>
                   <button
+                    type="button"
+                    onClick={openPersonalize}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                      isDark ? "text-slate-200 hover:bg-slate-800 hover:text-amber-300" : "text-slate-700 hover:bg-slate-50 hover:text-amber-700"
+                    }`}
+                  >
+                    <KeyRound size={16} />
+                    Personalize
+                    {personalHfKeyActive && (
+                      <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                        HF
+                      </span>
+                    )}
+                  </button>
+                  <button
                     onClick={handleLogout}
                     className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 transition-colors mt-1 ${
                       isDark ? "hover:bg-red-950/40 border-t border-slate-800" : "hover:bg-red-50 border-t border-slate-50"
@@ -583,31 +731,60 @@ export default function DashboardPage() {
           </header>
 
           {/* CENTER STAGE (Greeting & Cards) */}
-          <main className="flex-1 overflow-y-auto px-4 pb-40">
+          <main
+            ref={mainScrollRef}
+            className={`flex-1 overflow-y-auto px-4 ${isCreating || selectedProject ? "pb-40" : "pb-8"}`}
+          >
             {selectedProject ? (
               <div className="max-w-3xl mx-auto pt-10 px-4">
-                <div className="mb-6 flex items-center justify-between px-4">
-                  <h2 className="text-2xl font-bold text-slate-800">{selectedProject.title}</h2>
-                  <button
-                    onClick={() => handleDeleteProject(selectedProject.id)}
-                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100"
-                  >
-                    Xóa project
-                  </button>
+                <div className="mb-6 flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
+                  <h2 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-800"}`}>{selectedProject.title}</h2>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedProject.content?.trim() &&
+                      selectedProject.content !== "Waiting for LLM generation..." && (
+                        <button
+                          type="button"
+                          onClick={() => setIsExportPanelOpen(true)}
+                          disabled={exportingFormat !== null}
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
+                            isDark
+                              ? "border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <FileDown size={14} />
+                          {exportingFormat ? "Đang export..." : "Export"}
+                        </button>
+                      )}
+                    <button
+                      onClick={() => handleDeleteProject(selectedProject.id)}
+                      className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        isDark
+                          ? "border-red-900/60 bg-red-950/40 text-red-300 hover:bg-red-950/70"
+                          : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                      }`}
+                    >
+                      Xóa project
+                    </button>
+                  </div>
                 </div>
-                <div className="bg-blue-50 text-blue-900 p-4 rounded-xl mb-6 shadow-sm border border-blue-100 self-end ml-auto max-w-[85%]">
-                  <p className="font-semibold text-xs text-blue-700 mb-1 uppercase tracking-wider">Your Prompt</p>
+                <div className={`p-4 rounded-xl mb-6 shadow-sm border self-end ml-auto max-w-[85%] ${
+                  isDark ? "bg-slate-800/80 border-slate-700 text-slate-100" : "bg-blue-50 text-blue-900 border-blue-100"
+                }`}>
+                  <p className={`font-semibold text-xs mb-1 uppercase tracking-wider ${isDark ? "text-blue-300" : "text-blue-700"}`}>Your Prompt</p>
                   <p className="text-sm font-medium whitespace-pre-wrap">{selectedProject.prompt}</p>
                 </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-slate-700 mb-8 w-full max-w-[95%]">
+                <div className={`p-6 rounded-2xl shadow-sm border mb-8 w-full max-w-[95%] ${
+                  isDark ? "bg-slate-800/60 border-slate-700 text-slate-200" : "bg-white border-slate-100 text-slate-700"
+                }`}>
                   <div className="flex items-center gap-2 mb-4">
                     <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center text-white">
                       <Sparkles size={12} />
                     </div>
                     <span className="font-bold text-sm">AI Generated Content</span>
                   </div>
-                  <div className="prose prose-sm max-w-none prose-slate">
+                  <div className={`prose prose-sm max-w-none ${isDark ? "prose-invert" : "prose-slate"}`}>
                     {selectedProject.content === "Waiting for LLM generation..." ? (
                       <div className="flex items-center gap-2 text-slate-400 animate-pulse">
                         <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
@@ -646,9 +823,14 @@ export default function DashboardPage() {
             )}
           </main>
 
-          { }
           {(isCreating || selectedProject) && (
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-[95%] sm:w-[85%] max-w-4xl z-30">
+            <div
+              className={`absolute bottom-6 left-1/2 z-30 w-[95%] max-w-4xl -translate-x-1/2 sm:w-[85%] transition-all duration-300 ease-out ${
+                isMainAtBottom
+                  ? "pointer-events-auto translate-y-0 opacity-100"
+                  : "pointer-events-none translate-y-8 opacity-0"
+              }`}
+            >
               <div className="bg-[#1b1c20] border border-[#2a2c31] shadow-[0_10px_40px_rgba(0,0,0,0.5)] rounded-3xl p-3 flex flex-col gap-2 transition-all">
 
                 {/* Input Area */}
@@ -662,15 +844,18 @@ export default function DashboardPage() {
                 {/* Tools & Generate Button Bar */}
                 <div className="flex items-center justify-between pt-1 px-2 border-t border-[#2a2c31]/50 mt-1">
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
                     <select
-                      value={modelName}
+                      value={HF_MODEL_OPTIONS.includes(modelName) ? modelName : HF_MODEL_OPTIONS[0]}
                       onChange={(e) => setModelName(e.target.value)}
-                      className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg"
+                      title="Model Hugging Face (danh sách được cấu hình trong app)"
+                      className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg max-w-[min(100%,18rem)] font-mono truncate"
                     >
-                      <option>Qwen/Qwen2.5-72B-Instruct</option>
-                      <option>meta-llama/Llama-3.1-70B-Instruct</option>
-                      <option>mistralai/Mixtral-8x7B-Instruct-v0.1</option>
+                      {HF_MODEL_OPTIONS.map((id) => (
+                        <option key={id} value={id}>
+                          {id}
+                        </option>
+                      ))}
                     </select>
                     <select
                       value={creativity}
@@ -718,13 +903,17 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
+              {personalHfKeyActive && (
+                <p className="text-center mt-2 text-[10px] text-amber-400/90 font-medium font-sans">
+                  Đang dùng Hugging Face token cá nhân (Personalize).
+                </p>
+              )}
               <div className="text-center mt-3 text-[10px] text-slate-400 font-medium font-sans">
                 AI may display inaccurate info, so please double check the response.
               </div>
             </div>
           )}
 
-          { }
           {isProfileOpen && (
             <>
               {/* Backdrop Overlay */}
@@ -801,6 +990,70 @@ export default function DashboardPage() {
             </>
           )}
 
+          {isPersonalizeOpen && (
+            <>
+              <div
+                className="absolute inset-0 bg-slate-900/20 backdrop-blur-[2px] z-40 animate-in fade-in"
+                onClick={() => setIsPersonalizeOpen(false)}
+              />
+              <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-[#1b1c20] shadow-[0_0_40px_rgba(0,0,0,0.2)] z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                <div className="flex items-center justify-between border-b border-[#32353d] px-6 py-4">
+                  <div>
+                    <h3 className="text-white font-semibold">Personalize</h3>
+                    <p className="text-xs text-[#8c8f99] mt-0.5">Hugging Face Inference API</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPersonalizeOpen(false)}
+                    className="text-[#8c8f99] hover:text-white transition-colors p-1"
+                    aria-label="Đóng"
+                  >
+                    <X size={20} strokeWidth={1.5} />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+                  <p className="text-sm text-[#cdd0d5] leading-relaxed">
+                    Dán <strong className="text-white">HF token</strong> của bạn để gọi model lớn qua tài khoản của bạn.
+                    Key chỉ lưu trong <strong className="text-white">sessionStorage</strong> của trình duyệt, gửi kèm request sinh nội dung — không lưu trên server.
+                  </p>
+                  <div>
+                    <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2">HF API token</label>
+                    <input
+                      type="password"
+                      value={personalizeKeyInput}
+                      onChange={(e) => setPersonalizeKeyInput(e.target.value)}
+                      placeholder="hf_..."
+                      autoComplete="off"
+                      className="w-full bg-[#2a2c31] rounded-xl px-4 py-3 text-[14px] text-[#f3f4f6] outline-none border border-transparent focus:border-blue-500 font-mono text-sm"
+                    />
+                  </div>
+                  {personalizeMessage && (
+                    <p className="text-xs text-emerald-400">{personalizeMessage}</p>
+                  )}
+                  <div className="flex flex-col gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={savePersonalizeKey}
+                      className="w-full rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2.5 transition-colors"
+                    >
+                      Lưu key (phiên hiện tại)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearPersonalizeKey}
+                      className="w-full rounded-xl border border-[#3f3f46] text-[#e5e7eb] hover:bg-[#2a2c31] font-semibold px-4 py-2.5 transition-colors"
+                    >
+                      Xóa key
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-[#6b7280] leading-relaxed">
+                    Model khi sinh nội dung chỉ được chọn trong <strong className="text-[#9ca3af]">dropdown trên thanh chat</strong> (danh sách đã cài đặt). Token HF cá nhân chỉ thay key gọi API; không có token thì server dùng key mặc định (nếu có).
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+
           {isProjectSettingsOpen && selectedProject && (
             <>
               <div
@@ -834,6 +1087,73 @@ export default function DashboardPage() {
                       {teamToken && <button onClick={() => copyText(teamToken)} className="text-xs text-blue-300">Copy</button>}
                     </div>
                   </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {isExportPanelOpen && selectedProject && (
+            <>
+              <div
+                className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px] z-40 animate-in fade-in"
+                onClick={() => exportingFormat === null && setIsExportPanelOpen(false)}
+              />
+              <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-[#1b1c20] shadow-[0_0_40px_rgba(0,0,0,0.2)] z-50 flex flex-col animate-in slide-in-from-right duration-300">
+                <div className="flex items-center justify-between border-b border-[#32353d] px-6 py-4">
+                  <div>
+                    <h3 className="text-white font-semibold">Export project</h3>
+                    <p className="text-xs text-[#8c8f99] mt-0.5">Tùy chọn file và translation trước khi tải</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsExportPanelOpen(false)}
+                    disabled={exportingFormat !== null}
+                    className="text-[#8c8f99] hover:text-white transition-colors p-1 disabled:opacity-50"
+                    aria-label="Đóng"
+                  >
+                    <X size={20} strokeWidth={1.5} />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                  <div>
+                    <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2">Định dạng file</label>
+                    <select
+                      value={exportFormatChoice}
+                      onChange={(e) => setExportFormatChoice(e.target.value as "md" | "pdf" | "docx")}
+                      disabled={exportingFormat !== null}
+                      className="w-full bg-[#2a2c31] rounded-xl px-4 py-3 text-[14px] text-[#f3f4f6] outline-none border border-transparent focus:border-blue-500"
+                    >
+                      <option value="md">Markdown (.md)</option>
+                      <option value="docx">Word (.docx)</option>
+                      <option value="pdf">PDF (.pdf)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2">
+                      Translation trước khi export (google-t5/t5-base)
+                    </label>
+                    <select
+                      value={exportTranslationMode}
+                      onChange={(e) => setExportTranslationMode(e.target.value as TranslationMode)}
+                      disabled={exportingFormat !== null}
+                      className="w-full bg-[#2a2c31] rounded-xl px-4 py-3 text-[14px] text-[#f3f4f6] outline-none border border-transparent focus:border-blue-500"
+                    >
+                      <option value="none">Không dịch</option>
+                      <option value="vi-to-en">Tiếng Việt → English</option>
+                      <option value="en-to-vi">English → Tiếng Việt</option>
+                    </select>
+                    <p className="mt-2 text-[11px] text-[#6b7280] leading-relaxed">
+                      Nếu bạn đã lưu HF token trong Personalize thì request translation sẽ dùng token đó.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleExportProject(exportFormatChoice, exportTranslationMode)}
+                    disabled={exportingFormat !== null}
+                    className="w-full rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2.5 transition-colors disabled:opacity-60"
+                  >
+                    {exportingFormat !== null ? "Đang xử lý..." : "Bắt đầu export"}
+                  </button>
                 </div>
               </div>
             </>
