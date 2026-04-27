@@ -71,6 +71,16 @@ class ProjectTeamToken(Base):
     token = Column(String(255), nullable=False, unique=True, index=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
+
+class AudioFile(Base):
+    __tablename__ = "audio_files"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    audio_url = Column(Text, nullable=False) 
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
 # ==========================================
 # PYDANTIC SCHEMAS (Data Validation Models)
 # ==========================================
@@ -139,3 +149,18 @@ class ExportTranslateResp(BaseModel):
     title: str
     prompt: str
     content: str
+class AudioGenerateReq(BaseModel):
+    text: str
+    language: Literal["vietnamese", "english"] = "vietnamese"
+    voice: str = "female"  
+
+
+class AudioResponse(BaseModel):
+    id: str
+    project_id: str
+    title: str
+    audio_url: str
+    created_at: str
+
+    class Config:
+        from_attributes = True
