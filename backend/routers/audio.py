@@ -97,7 +97,6 @@ def generate_audio_from_text(
     hf_api_key: str | None = None,
 ) -> bytes:
     """
-    Generate audio từ text sử dụng Hugging Face TTS.
     Trả về bytes của file audio (WAV format).
     """
     try:
