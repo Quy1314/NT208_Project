@@ -19,6 +19,7 @@ from pydantic import BaseModel # Kept existing
 import models
 from database import get_db
 from auth import get_current_user
+from routers.audio import generate_audio_from_text
 
 # Tạo Router cho group API liên quan đến Dự án, có prefix là /api/projects
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
@@ -36,6 +37,22 @@ HF_TRANSLATION_URLS_BY_MODE = {
 }
 MAX_TRANSLATE_CHUNK = 900
 FINE_GRAIN_TRANSLATE_CHUNK = 280
+
+
+def _extract_tts_text(prompt: str) -> str:
+    cleaned = (prompt or "").strip()
+    if not cleaned:
+        return ""
+    quote_pairs = [('"', '"'), ("“", "”"), ("'", "'")]
+    for left, right in quote_pairs:
+        if left in cleaned and right in cleaned:
+            start = cleaned.find(left)
+            end = cleaned.rfind(right)
+            if end > start:
+                quoted = cleaned[start + 1:end].strip()
+                if quoted:
+                    return quoted
+    return cleaned
 
 
 # Schema đã được chuyển qua models.py
@@ -491,14 +508,23 @@ def create_project(
     Bắt buộc có JWT Token.
     Optional: header X-HF-Api-Key — key HF tạm của user (không lưu server).
     """
-    # 1. Gọi LLM API để sinh nội dung dựa trên prompt của user
-    generated_content = generate_story_content(
-        title=data.title,
-        instruction=data.prompt,
-        language=data.language,
-        model_name=data.model_name,
-        hf_api_key=x_hf_api_key,
-    )
+    # Check if model is audio model
+    audio_models = ["facebook/mms-tts-vie", "microsoft/speecht5_tts"]
+    is_audio_model = data.model_name and data.model_name in audio_models
+
+    # 1. Sinh nội dung theo mode:
+    # - Audio mode: dùng trực tiếp text cần đọc từ prompt, không đi qua chat model.
+    # - Text mode: sinh nội dung bằng LLM như cũ.
+    if is_audio_model:
+        generated_content = _extract_tts_text(data.prompt)
+    else:
+        generated_content = generate_story_content(
+            title=data.title,
+            instruction=data.prompt,
+            language=data.language,
+            model_name=data.model_name,
+            hf_api_key=x_hf_api_key,
+        )
 
     # 2. Tạo bản ghi dự án mới với nội dung AI vừa sinh
     new_project = models.Project(
@@ -520,8 +546,30 @@ def create_project(
         )
     )
     db.commit()
-    
-    # 3. Trả về kết quả cho Frontend
+
+    # 3. Nếu là audio model, tự động generate audio từ content vừa sinh
+    if is_audio_model:
+        # Không để lỗi TTS làm fail toàn bộ thao tác tạo project.
+        try:
+            audio_bytes = generate_audio_from_text(
+                generated_content,
+                data.language,
+                hf_api_key=x_hf_api_key,
+            )
+            audio_filename = f"audio_{new_project.id}_{len(audio_bytes)}.wav"
+            audio_path = f"/tmp/{audio_filename}"
+            with open(audio_path, "wb") as f:
+                f.write(audio_bytes)
+            audio_file = models.AudioFile(
+                project_id=new_project.id,
+                title=f"Audio for {new_project.title}",
+                audio_url=audio_path,
+            )
+            db.add(audio_file)
+            db.commit()
+        except Exception as audio_err:
+            print(f"[WARN] TTS auto-generation failed for project {new_project.id}: {audio_err}")
+
     return models.ProjectResponse(
         id=str(new_project.id),
         title=new_project.title,

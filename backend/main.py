@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
 import models
 import auth
-from routers import projects, teams
+from routers import projects, teams, audio
 from sqlalchemy import text
 
 # Tạo sẵn toàn bộ bảng trong database (dựa trên các classes ở models.py) nếu chưa tồn tại
@@ -14,6 +14,11 @@ Base.metadata.create_all(bind=engine)
 
 # Khởi tạo application FastAPI chính
 app = FastAPI()
+
+# Đăng ký routers
+app.include_router(projects.router)
+app.include_router(teams.router)
+app.include_router(audio.router)
 
 # Cấu hình CORS Middleware: Cho phép Frontend (chạy ở localhost:3000) gọi API qua Backend (8000)
 app.add_middleware(

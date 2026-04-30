@@ -39,6 +39,13 @@ function buildProjectRequestHeaders(token: string | null): Record<string, string
   return headers;
 }
 
+function normalizeAudioUrl(url: string): string {
+  if (!url) return url;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("/")) return `${API_BASE_URL}${url}`;
+  return url;
+}
+
 /** Các model Hugging Face được cài đặt trong app — user chỉ chọn qua dropdown, không nhập tay. */
 const HF_MODEL_OPTIONS: string[] = [
   "Qwen/Qwen2.5-72B-Instruct",
@@ -47,6 +54,9 @@ const HF_MODEL_OPTIONS: string[] = [
   "meta-llama/Llama-3.2-3B-Instruct",
   "mistralai/Mixtral-8x7B-Instruct-v0.1",
   "mistralai/Mistral-7B-Instruct-v0.3",
+  // Audio models
+  "facebook/mms-tts-vie",
+  "microsoft/speecht5_tts",
 ];
 
 /** Model ảnh free phổ biến trên Hugging Face (tham khảo để dùng với endpoint text-to-image). */
@@ -70,6 +80,26 @@ interface TeamWorkspace {
   id: string;
   name: string;
 }
+
+type ContentMode = "text-to-text" | "text-to-audio" | "text-to-video";
+
+const MODE_CONFIGS: Record<ContentMode, { label: string; description: string; models: string[] }> = {
+  "text-to-text": {
+    label: "📖 Text Generation",
+    description: "Generate stories, articles, scripts",
+    models: ["Qwen/Qwen2.5-72B-Instruct", "meta-llama/Llama-3.1-70B-Instruct", "mistralai/Mixtral-8x7B-Instruct-v0.1"]
+  },
+  "text-to-audio": {
+    label: "🎵 Audio Generation (TTS)",
+    description: "Convert text to speech/audio",
+    models: ["facebook/mms-tts-vie", "microsoft/speecht5_tts"]
+  },
+  "text-to-video": {
+    label: "🎬 Video Generation",
+    description: "Generate videos from text prompts",
+    models: ["Coming soon..."]
+  }
+};
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -113,6 +143,10 @@ export default function DashboardPage() {
   const [personalizeKeyInput, setPersonalizeKeyInput] = useState("");
   const [personalizeMessage, setPersonalizeMessage] = useState("");
   const [personalHfKeyActive, setPersonalHfKeyActive] = useState(false);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [currentMode, setCurrentMode] = useState<ContentMode>("text-to-text");
+  const [isModeModalOpen, setIsModeModalOpen] = useState(false);
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
@@ -167,6 +201,32 @@ export default function DashboardPage() {
     } catch (e) {
       console.error("Failed to fetch teams", e);
     }
+  };
+
+  const handleModeChange = (newMode: ContentMode) => {
+    setCurrentMode(newMode);
+    // Update model name to first model of new mode
+    const models = MODE_CONFIGS[newMode].models;
+    setModelName(models[0] || "");
+    setIsModeModalOpen(false);
+  };
+
+  const detectModeFromPrompt = (text: string) => {
+    const lowerText = text.toLowerCase();
+    const audioKeywords = ["audio", "voice", "speak", "read", "tts", "âm thanh", "giọng nói"];
+    const videoKeywords = ["video", "clip", "animation", "phim", "animated"];
+
+    if (audioKeywords.some(keyword => lowerText.includes(keyword))) {
+      return "text-to-audio";
+    }
+    if (videoKeywords.some(keyword => lowerText.includes(keyword))) {
+      return "text-to-video";
+    }
+    return "text-to-text";
+  };
+
+  const getModels = () => {
+    return MODE_CONFIGS[currentMode].models;
   };
 
   useEffect(() => {
@@ -403,6 +463,19 @@ export default function DashboardPage() {
       return;
     }
 
+    // Auto-detect mode từ prompt
+    const detectedMode = detectModeFromPrompt(prompt);
+    if (detectedMode !== currentMode) {
+      const confirmed = confirm(
+        `🤖 Detected: "${MODE_CONFIGS[detectedMode].label}"\n\n` +
+        `Chúng tôi nhận thấy prompt của bạn yêu cầu ${detectedMode === "text-to-audio" ? "tạo âm thanh" : "tạo video"}.\n` +
+        `Bạn có muốn chuyển sang mode này không?`
+      );
+      if (confirmed) {
+        handleModeChange(detectedMode);
+      }
+    }
+
     // Tự động tạo Title từ Prompt nếu người dùng không nhập
     const finalTitle = title.trim() ? title : (prompt.trim().slice(0, 30) + (prompt.length > 30 ? "..." : ""));
 
@@ -424,10 +497,47 @@ export default function DashboardPage() {
         setIsCreating(false);
         setSelectedProject(data);
         fetchProjects();
+
+        // Nếu chọn audio model, tự động fetch audio
+        const audioModels = MODE_CONFIGS["text-to-audio"].models;
+        if (audioModels.includes(modelName.trim())) {
+          try {
+            const audioRes = await fetch(`${API_BASE_URL}/api/audio/project/${data.id}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (audioRes.ok) {
+              const audioData = await audioRes.json();
+              if (audioData.length > 0) {
+                setAudioUrl(normalizeAudioUrl(audioData[0].audio_url));
+              } else {
+                // Fallback: nếu backend auto-generate chưa có file, gọi endpoint generate trực tiếp.
+                const ttsRes = await fetch(`${API_BASE_URL}/api/audio/generate?project_id=${data.id}`, {
+                  method: "POST",
+                  headers: buildProjectRequestHeaders(token),
+                  body: JSON.stringify({
+                    text: (data.content || data.prompt || "").slice(0, 1000),
+                    language,
+                    voice: "female",
+                  }),
+                });
+                if (ttsRes.ok) {
+                  const ttsData = await ttsRes.json();
+                  setAudioUrl(normalizeAudioUrl(ttsData.audio_url));
+                } else {
+                  const ttsErr = await ttsRes.json().catch(() => ({}));
+                  console.error("Auto TTS fallback failed:", ttsErr);
+                }
+              }
+            }
+          } catch (e) {
+            console.error("Failed to fetch audio", e);
+          }
+        }
       } else if (res.status === 401) {
         handleLogout();
       } else {
-        alert("Có lỗi xảy ra khi tạo dự án.");
+        const err = await res.json().catch(() => ({}));
+        alert(err.detail || "Có lỗi xảy ra khi tạo dự án.");
       }
     } catch (e) {
       console.error(e);
@@ -466,6 +576,52 @@ export default function DashboardPage() {
       console.error(e);
     } finally {
       setIsContinuing(false);
+    }
+  };
+
+  const handleGenerateAudio = async () => {
+    if (!selectedProject) {
+      alert("Vui lòng chọn hoặc tạo một project trước.");
+      return;
+    }
+
+    // Dùng nội dung đã generate của project để tạo audio
+    const textToConvert = selectedProject.content || selectedProject.prompt;
+    if (!textToConvert.trim()) {
+      alert("Không có nội dung để chuyển thành audio. Hãy generate nội dung trước.");
+      return;
+    }
+
+    if (isGeneratingAudio) return;
+    setIsGeneratingAudio(true);
+
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/audio/generate?project_id=${selectedProject.id}`, {
+        method: "POST",
+        headers: buildProjectRequestHeaders(token),
+        body: JSON.stringify({
+          text: textToConvert.slice(0, 1000), // Giới hạn 1000 ký tự để tránh timeout
+          language: language,
+          voice: "female"
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setAudioUrl(normalizeAudioUrl(data.audio_url));
+        alert("✅ Generate audio thành công!");
+      } else if (res.status === 401) {
+        handleLogout();
+      } else {
+        const error = await res.json();
+        alert(`❌ Lỗi: ${error.detail || "Không thể generate audio"}`);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("❌ Lỗi kết nối khi generate audio.");
+    } finally {
+      setIsGeneratingAudio(false);
     }
   };
 
@@ -829,6 +985,20 @@ export default function DashboardPage() {
                       <p className="whitespace-pre-wrap leading-relaxed">{selectedProject.content}</p>
                     )}
                   </div>
+
+                  {/* Audio Player */}
+                  {audioUrl && (
+                    <div className="mt-6 pt-6 border-t border-slate-200">
+                      <p className="text-sm font-semibold text-slate-600 mb-3">🎵 Audio Generated:</p>
+                      <audio 
+                        controls 
+                        className="w-full rounded-lg"
+                        src={audioUrl}
+                      >
+                        Your browser does not support the audio element.
+                      </audio>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : isCreating ? (
@@ -878,27 +1048,40 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between pt-1 px-2 border-t border-[#2a2c31]/50 mt-1">
 
                   <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    {/* Mode Selector Button */}
+                    <button
+                      onClick={() => setIsModeModalOpen(true)}
+                      className="text-xs font-semibold text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31] px-2 py-1.5 rounded-lg transition-colors border border-[#3f3f46]"
+                      title="Switch content mode"
+                    >
+                      {MODE_CONFIGS[currentMode].label}
+                    </button>
+
+                    {/* Model Select - Dynamic based on mode */}
                     <select
-                      value={HF_MODEL_OPTIONS.includes(modelName) ? modelName : HF_MODEL_OPTIONS[0]}
+                      value={MODE_CONFIGS[currentMode].models.includes(modelName) ? modelName : MODE_CONFIGS[currentMode].models[0]}
                       onChange={(e) => setModelName(e.target.value)}
                       title="Model Hugging Face (danh sách được cấu hình trong app)"
                       className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg max-w-[min(100%,18rem)] font-mono truncate"
                     >
-                      {HF_MODEL_OPTIONS.map((id) => (
+                      {MODE_CONFIGS[currentMode].models.map((id) => (
                         <option key={id} value={id}>
                           {id}
                         </option>
                       ))}
                     </select>
-                    <select
-                      value={creativity}
-                      onChange={(e) => setCreativity(e.target.value)}
-                      className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg"
-                    >
-                      <option>Focused</option>
-                      <option>Balanced</option>
-                      <option>Creative</option>
-                    </select>
+                    {currentMode === "text-to-text" && (
+                      <select
+                        value={creativity}
+                        onChange={(e) => setCreativity(e.target.value)}
+                        className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg"
+                      >
+                        <option>Focused</option>
+                        <option>Balanced</option>
+                        <option>Creative</option>
+                      </select>
+                    )}
                     <select
                       value={language}
                       onChange={(e) => setLanguage(e.target.value as "vietnamese" | "english")}
@@ -914,14 +1097,41 @@ export default function DashboardPage() {
                     <button className="flex items-center gap-1.5 text-xs font-semibold text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31] px-2 py-1.5 rounded-lg transition-colors">
                       <Paperclip size={14} /> Attach
                     </button>
-                    <button className="flex items-center gap-1.5 text-xs font-semibold text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31] px-2 py-1.5 rounded-lg transition-colors">
-                      <Mic size={14} /> Voice
-                    </button>
+                    
+                    {/* Voice Button - Only for audio mode */}
+                    {currentMode === "text-to-audio" && (
+                      <button 
+                        onClick={handleGenerateAudio}
+                        disabled={isGeneratingAudio || !selectedProject}
+                        className={`flex items-center gap-1.5 text-xs font-semibold px-2 py-1.5 rounded-lg transition-colors ${
+                          isGeneratingAudio || !selectedProject
+                            ? "text-[#6b7280] cursor-not-allowed"
+                            : "text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31]"
+                        }`}
+                        title={selectedProject ? "Generate audio từ nội dung" : "Chọn hoặc tạo project trước"}
+                      >
+                        {isGeneratingAudio ? (
+                          <>
+                            <div className="w-3 h-3 rounded-full border-2 border-[#a1a1aa]/80 border-t-transparent animate-spin"></div>
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Mic size={14} /> Voice
+                          </>
+                        )}
+                      </button>
+                    )}
 
                     <button
                       onClick={selectedProject ? handleContinueProject : handleCreateProject}
                       disabled={selectedProject ? isContinuing : isGenerating}
-                      className={`flex items-center gap-1.5 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all shadow-md ml-2 ${(selectedProject ? isContinuing : isGenerating) ? 'bg-indigo-500/50 cursor-not-allowed' : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 hover:shadow-lg'}`}>
+                      className={`flex items-center gap-1.5 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all shadow-md ml-2 ${
+                        (selectedProject ? isContinuing : isGenerating)
+                          ? "bg-indigo-500/50 cursor-not-allowed"
+                          : "bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 hover:shadow-lg"
+                      }`}
+                    >
                       {(selectedProject ? isContinuing : isGenerating) ? (
                         <>
                           <div className="w-4 h-4 rounded-full border-2 border-white/80 border-t-transparent animate-spin"></div>
@@ -945,6 +1155,7 @@ export default function DashboardPage() {
                 AI may display inaccurate info, so please double check the response.
               </div>
             </div>
+          </div>
           )}
 
           {isProfileOpen && (
@@ -1200,6 +1411,53 @@ export default function DashboardPage() {
                     className="w-full rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2.5 transition-colors disabled:opacity-60"
                   >
                     {exportingFormat !== null ? "Đang xử lý..." : "Bắt đầu export"}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Mode Selection Modal */}
+          {isModeModalOpen && (
+            <>
+              <div
+                className="absolute inset-0 bg-slate-900/20 backdrop-blur-[2px] z-40 animate-in fade-in"
+                onClick={() => setIsModeModalOpen(false)}
+              />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-[#1b1c20] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.4)] z-50 animate-in fade-in scale-in duration-300">
+                <div className="p-6 border-b border-[#32353d]">
+                  <h2 className="text-xl font-bold text-white">Choose Content Mode</h2>
+                  <p className="text-sm text-slate-400 mt-1">Select the type of content you want to generate</p>
+                </div>
+
+                <div className="p-6 space-y-3">
+                  {(Object.keys(MODE_CONFIGS) as ContentMode[]).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => handleModeChange(mode)}
+                      className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                        currentMode === mode
+                          ? "border-blue-500 bg-blue-500/10"
+                          : "border-[#32353d] bg-[#2a2c31] hover:border-[#3f3f46]"
+                      }`}
+                    >
+                      <div className="font-semibold text-white">{MODE_CONFIGS[mode].label}</div>
+                      <div className="text-xs text-slate-400 mt-1">{MODE_CONFIGS[mode].description}</div>
+                      <div className="text-xs text-slate-500 mt-2 flex flex-wrap gap-1">
+                        {MODE_CONFIGS[mode].models.map((model, idx) => (
+                          <span key={idx} className="px-2 py-1 bg-[#32353d] rounded">{model}</span>
+                        ))}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="p-4 border-t border-[#32353d] flex gap-2">
+                  <button
+                    onClick={() => setIsModeModalOpen(false)}
+                    className="flex-1 rounded-lg bg-[#2a2c31] text-white font-semibold py-2.5 hover:bg-[#32353d] transition-colors"
+                  >
+                    Close
                   </button>
                 </div>
               </div>
