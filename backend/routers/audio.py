@@ -1,18 +1,16 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, status, Query
+import os
+import time
+from uuid import UUID
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-import os
-import requests
-import time
-from io import BytesIO
-from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
-from uuid import UUID
-from pydub import AudioSegment
 
 import models
-from database import get_db
 from auth import get_current_user
+from database import get_db
+from services.audio_pipeline import generate_audio_from_text, get_audio_upload_dir, to_mp3_if_possible
+from services.worker import process_audio_job
 
 router = APIRouter(prefix="/api/audio", tags=["Audio"])
 
@@ -21,176 +19,147 @@ def _build_public_audio_url(audio_id: UUID) -> str:
     return f"/api/audio/file/{audio_id}"
 
 
-def _tts_models_for_language(language: str) -> list[str]:
-    if language == "vietnamese":
-        return [
-            "facebook/mms-tts-vie",
-        ]
-    return [
-        "microsoft/speecht5_tts",
-        "facebook/mms-tts-eng",
-    ]
-
-
-def _generate_audio_via_http(api_key: str, model: str, text: str) -> bytes:
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "inputs": text,
-        "options": {"wait_for_model": True},
-    }
-    endpoints = [
-        f"https://router.huggingface.co/hf-inference/models/{model}",
-        f"https://api-inference.huggingface.co/models/{model}",
-    ]
-
-    last_error = ""
-    for endpoint in endpoints:
-        for _ in range(3):
-            try:
-                res = requests.post(endpoint, json=payload, headers=headers, timeout=120)
-                if res.ok and res.content:
-                    return res.content
-                try:
-                    err = res.json()
-                    err_msg = str(err.get("error", "")).strip()
-                    estimated = err.get("estimated_time")
-                    if res.status_code in (429, 503) or "loading" in err_msg.lower():
-                        if isinstance(estimated, (int, float)):
-                            time.sleep(max(1.0, float(estimated)))
-                        else:
-                            time.sleep(2.0)
-                        continue
-                    last_error = err_msg or f"HTTP {res.status_code}"
-                    break
-                except Exception:
-                    last_error = f"HTTP {res.status_code}: {res.text[:200]}"
-                    break
-            except requests.RequestException as req_err:
-                last_error = str(req_err)
-                time.sleep(1.2)
-
-    raise RuntimeError(last_error or "Không thể gọi Hugging Face TTS qua HTTP.")
-
-
-def _to_mp3_if_possible(audio_bytes: bytes) -> tuple[bytes, str]:
-    """
-    Cố gắng convert WAV -> MP3. Nếu không convert được thì giữ nguyên WAV.
-    Trả về (bytes, extension).
-    """
+def _safe_uuid(value: str, message: str) -> UUID:
     try:
-        wav_stream = BytesIO(audio_bytes)
-        seg = AudioSegment.from_file(wav_stream, format="wav")
-        out = BytesIO()
-        seg.export(out, format="mp3", bitrate="128k")
-        return out.getvalue(), "mp3"
-    except Exception:
-        return audio_bytes, "wav"
+        return UUID(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message) from exc
 
 
-def generate_audio_from_text(
-    text: str,
-    language: str = "vietnamese",
-    voice: str = "female",
-    hf_api_key: str | None = None,
-) -> bytes:
+@router.post("/jobs", response_model=models.AudioJobCreateResp, status_code=status.HTTP_202_ACCEPTED)
+def create_audio_job(
+    data: models.AudioJobCreateReq,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+    x_fpt_api_key: str | None = Header(None, alias="X-FPT-Api-Key"),
+):
     """
-    Trả về bytes của file audio (WAV format).
+    Create async audio job and return immediately.
     """
-    try:
-        from dotenv import find_dotenv
-        load_dotenv(find_dotenv(), override=True)
-        env_key = os.getenv("hf_key_read")
-        api_key = (hf_api_key or "").strip() or (env_key or "").strip()
-        if not api_key:
-            raise HTTPException(status_code=500, detail="Hugging Face API Key chưa cấu hình.")
+    if not x_fpt_api_key and not os.getenv("FPT_API_KEY"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cần FPT TTS API key trong header X-FPT-Api-Key hoặc biến môi trường FPT_API_KEY.",
+        )
 
-        model_candidates = _tts_models_for_language(language)
-        errors: list[str] = []
+    prompt = (data.prompt or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Prompt không được để trống.")
 
-        for model in model_candidates:
-            try:
-                client = InferenceClient(token=api_key)
-                response = client.text_to_speech(text, model=model)
-                if isinstance(response, bytes) and response:
-                    return response
-                if isinstance(response, dict):
-                    audio_bytes = response.get("audio", b"")
-                    if isinstance(audio_bytes, bytes) and audio_bytes:
-                        return audio_bytes
-                raise RuntimeError("Empty audio response from InferenceClient.")
-            except Exception as client_err:
-                errors.append(f"InferenceClient/{model}: {repr(client_err)}")
-                try:
-                    audio_bytes = _generate_audio_via_http(api_key, model, text)
-                    if audio_bytes:
-                        return audio_bytes
-                except Exception as http_err:
-                    errors.append(f"HTTP/{model}: {repr(http_err)}")
+    job = models.AudioJob(
+        user_id=current_user.id,
+        prompt=prompt,
+        language=data.language,
+        status="queued",
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
 
-        compact = " | ".join(errors[-4:]) if errors else "Không có chi tiết lỗi."
-        raise HTTPException(status_code=500, detail=f"Không thể generate audio từ text. {compact}")
+    background_tasks.add_task(process_audio_job, job.id, x_fpt_api_key)
+    return models.AudioJobCreateResp(job_id=str(job.id), status="queued")
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Lỗi khi generate audio ({type(e).__name__}): {repr(e)}")
-        raise HTTPException(status_code=500, detail=f"Lỗi generate audio: {repr(e)}")
+
+@router.get("/jobs/{job_id}", response_model=models.AudioJobStatusResp)
+def get_audio_job_status(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Poll audio job status.
+    """
+    jid = _safe_uuid(job_id, "Audio job không tồn tại.")
+    job = (
+        db.query(models.AudioJob)
+        .filter(models.AudioJob.id == jid, models.AudioJob.user_id == current_user.id)
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio job không tồn tại.")
+
+    audio_url = _build_public_audio_url(job.id) if job.status == "done" and job.result_path else None
+    return models.AudioJobStatusResp(
+        job_id=str(job.id),
+        status=job.status,
+        audio_url=audio_url,
+        error=job.error,
+        created_at=job.created_at.isoformat(),
+    )
+
+
+@router.get("/file/{job_id}")
+def stream_audio_file(job_id: str, db: Session = Depends(get_db)):
+    """
+    Stream generated audio by audio job id.
+    Backward-compatible fallback: if job_id is an old AudioFile id, still stream it.
+    """
+    jid = _safe_uuid(job_id, "Audio không tồn tại.")
+
+    audio_job = db.query(models.AudioJob).filter(models.AudioJob.id == jid).first()
+    if audio_job:
+        if audio_job.status != "done" or not audio_job.result_path:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Audio chưa sẵn sàng. Trạng thái hiện tại: {audio_job.status}.",
+            )
+        if not os.path.exists(audio_job.result_path):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file audio trên server.")
+
+        media_type = "audio/mpeg" if audio_job.result_path.lower().endswith(".mp3") else "audio/wav"
+        return FileResponse(
+            path=audio_job.result_path,
+            media_type=media_type,
+            filename=os.path.basename(audio_job.result_path),
+        )
+
+    audio_file = db.query(models.AudioFile).filter(models.AudioFile.id == jid).first()
+    if not audio_file:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio không tồn tại.")
+    if not audio_file.audio_url or not os.path.exists(audio_file.audio_url):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file audio trên server.")
+
+    media_type = "audio/mpeg" if audio_file.audio_url.lower().endswith(".mp3") else "audio/wav"
+    return FileResponse(
+        path=audio_file.audio_url,
+        media_type=media_type,
+        filename=os.path.basename(audio_file.audio_url),
+    )
 
 
 @router.post("/generate", response_model=models.AudioResponse)
-def generate_audio(
+def generate_audio_legacy(
     data: models.AudioGenerateReq,
     project_id: str = Query(...),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
-    x_hf_api_key: str | None = Header(None, alias="X-HF-Api-Key"),
+    x_fpt_api_key: str | None = Header(None, alias="X-FPT-Api-Key"),
 ):
     """
-    Generate audio từ text của project.
-    - project_id: ID của project
-    - data.text: Text để convert thành audio
-    - data.language: Ngôn ngữ
-    - data.voice: Giọng đọc 
+    Legacy sync endpoint kept for existing frontend compatibility.
     """
-
-    # Kiểm tra project 
-    project = db.query(models.Project).filter(
-        models.Project.id == project_id,
-        models.Project.user_id == current_user.id
-    ).first()
+    project = (
+        db.query(models.Project)
+        .filter(models.Project.id == project_id, models.Project.user_id == current_user.id)
+        .first()
+    )
     if not project:
-        raise HTTPException(status_code=404, detail="Project không tồn tại hoặc không có quyền truy cập.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project không tồn tại hoặc không có quyền truy cập.")
+    if not x_fpt_api_key and not os.getenv("FPT_API_KEY"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cần FPT TTS API key trong header X-FPT-Api-Key")
 
-    # Generate audio
-    audio_bytes = generate_audio_from_text(
-        data.text,
-        data.language,
-        data.voice,
-        hf_api_key=x_hf_api_key,
-    )
+    audio_bytes = generate_audio_from_text(prompt=data.prompt, language=data.language, fpt_api_key=x_fpt_api_key)
+    stored_bytes, ext = to_mp3_if_possible(audio_bytes)
+    audio_filename = f"audio_{project_id}_{int(time.time() * 1000)}.{ext}"
 
-    # Cố gắng convert MP3 để đáp ứng mong đợi download/play mp3.
-    stored_bytes, ext = _to_mp3_if_possible(audio_bytes)
-    audio_filename = f"audio_{project_id}_{len(stored_bytes)}.{ext}"
-    
-    # Create uploads directory if it doesn't exist
-    upload_dir = os.path.join(os.path.dirname(__file__), "..", "uploads", "audio")
+    upload_dir = get_audio_upload_dir()
     os.makedirs(upload_dir, exist_ok=True)
-    
     audio_path = os.path.join(upload_dir, audio_filename)
+    with open(audio_path, "wb") as fp:
+        fp.write(stored_bytes)
 
-    with open(audio_path, "wb") as f:
-        f.write(stored_bytes)
-
-    # Lưu metadata vào DB
-    audio_file = models.AudioFile(
-        project_id=project.id,
-        title=f"Audio for {project.title}",
-        audio_url=audio_path  # URL nếu upload cloud
-    )
+    audio_file = models.AudioFile(project_id=project.id, title=f"Audio for {project.title}", audio_url=audio_path)
     db.add(audio_file)
     db.commit()
     db.refresh(audio_file)
@@ -200,7 +169,7 @@ def generate_audio(
         project_id=str(audio_file.project_id),
         title=audio_file.title,
         audio_url=_build_public_audio_url(audio_file.id),
-        created_at=audio_file.created_at.isoformat()
+        created_at=audio_file.created_at.isoformat(),
     )
 
 
@@ -208,18 +177,15 @@ def generate_audio(
 def get_project_audio(
     project_id: str,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(get_current_user),
 ):
-    """
-    Lấy danh sách audio files của project.
-    """
-    # Kiểm tra quyền
-    project = db.query(models.Project).filter(
-        models.Project.id == project_id,
-        models.Project.user_id == current_user.id
-    ).first()
+    project = (
+        db.query(models.Project)
+        .filter(models.Project.id == project_id, models.Project.user_id == current_user.id)
+        .first()
+    )
     if not project:
-        raise HTTPException(status_code=404, detail="Project không tồn tại hoặc không có quyền truy cập.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project không tồn tại hoặc không có quyền truy cập.")
 
     audio_files = db.query(models.AudioFile).filter(models.AudioFile.project_id == project_id).all()
     return [
@@ -228,36 +194,7 @@ def get_project_audio(
             project_id=str(af.project_id),
             title=af.title,
             audio_url=_build_public_audio_url(af.id),
-            created_at=af.created_at.isoformat()
-        ) for af in audio_files
+            created_at=af.created_at.isoformat(),
+        )
+        for af in audio_files
     ]
-
-
-@router.get("/file/{audio_id}")
-def stream_audio_file(
-    audio_id: str,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
-):
-    try:
-        aid = UUID(audio_id)
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Audio không tồn tại.")
-
-    audio_file = db.query(models.AudioFile).filter(models.AudioFile.id == aid).first()
-    if not audio_file:
-        raise HTTPException(status_code=404, detail="Audio không tồn tại.")
-
-    project = db.query(models.Project).filter(models.Project.id == audio_file.project_id).first()
-    if not project or project.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập audio này.")
-
-    local_path = audio_file.audio_url
-    if not local_path or not os.path.exists(local_path):
-        raise HTTPException(status_code=404, detail="Không tìm thấy file audio trên server.")
-
-    return FileResponse(
-        path=local_path,
-        media_type="audio/mpeg" if local_path.endswith(".mp3") else "audio/wav",
-        filename=os.path.basename(local_path),
-    )

@@ -39,6 +39,13 @@ function buildProjectRequestHeaders(token: string | null): Record<string, string
   return headers;
 }
 
+function buildAudioRequestHeaders(token: string | null): Record<string, string> {
+  const headers = buildProjectRequestHeaders(token);
+  const fpt = getPersonalHfApiKey();
+  if (fpt) headers["X-FPT-Api-Key"] = fpt;
+  return headers;
+}
+
 function normalizeAudioUrl(url: string): string {
   if (!url) return url;
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
@@ -55,8 +62,7 @@ const HF_MODEL_OPTIONS: string[] = [
   "mistralai/Mixtral-8x7B-Instruct-v0.1",
   "mistralai/Mistral-7B-Instruct-v0.3",
   // Audio models
-  "facebook/mms-tts-vie",
-  "microsoft/speecht5_tts",
+  "fpt-ai-tts-v5",
 ];
 
 /** Model ảnh free phổ biến trên Hugging Face (tham khảo để dùng với endpoint text-to-image). */
@@ -92,7 +98,7 @@ const MODE_CONFIGS: Record<ContentMode, { label: string; description: string; mo
   "text-to-audio": {
     label: "🎵 Audio Generation (TTS)",
     description: "Convert text to speech/audio",
-    models: ["facebook/mms-tts-vie", "microsoft/speecht5_tts"]
+    models: ["fpt-ai-tts-v5"]
   },
   "text-to-video": {
     label: "🎬 Video Generation",
@@ -513,9 +519,9 @@ export default function DashboardPage() {
                 // Fallback: nếu backend auto-generate chưa có file, gọi endpoint generate trực tiếp.
                 const ttsRes = await fetch(`${API_BASE_URL}/api/audio/generate?project_id=${data.id}`, {
                   method: "POST",
-                  headers: buildProjectRequestHeaders(token),
+                  headers: buildAudioRequestHeaders(token),
                   body: JSON.stringify({
-                    text: (data.content || data.prompt || "").slice(0, 1000),
+                    prompt: (data.content || data.prompt || "").slice(0, 1000),
                     language,
                     voice: "female",
                   }),
@@ -524,8 +530,14 @@ export default function DashboardPage() {
                   const ttsData = await ttsRes.json();
                   setAudioUrl(normalizeAudioUrl(ttsData.audio_url));
                 } else {
-                  const ttsErr = await ttsRes.json().catch(() => ({}));
-                  console.error("Auto TTS fallback failed:", ttsErr);
+                  const ttsText = await ttsRes.text().catch(() => "")
+                  let ttsErr = {} as any;
+                  try {
+                    ttsErr = JSON.parse(ttsText || "{}")
+                  } catch {
+                    ttsErr = { status: ttsRes.status, text: ttsText }
+                  }
+                  console.error("Auto TTS fallback failed:", ttsRes.status, ttsRes.statusText, ttsErr);
                 }
               }
             }
@@ -599,9 +611,9 @@ export default function DashboardPage() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/audio/generate?project_id=${selectedProject.id}`, {
         method: "POST",
-        headers: buildProjectRequestHeaders(token),
+        headers: buildAudioRequestHeaders(token),
         body: JSON.stringify({
-          text: textToConvert.slice(0, 1000), // Giới hạn 1000 ký tự để tránh timeout
+          prompt: textToConvert.slice(0, 1000), // Giới hạn 1000 ký tự để tránh timeout
           language: language,
           voice: "female"
         })
@@ -614,8 +626,15 @@ export default function DashboardPage() {
       } else if (res.status === 401) {
         handleLogout();
       } else {
-        const error = await res.json();
+        const text = await res.text().catch(() => "")
+        let error = { detail: "Không thể generate audio" } as any
+        try {
+          error = JSON.parse(text || "{}")
+        } catch {
+          error = { detail: text || `HTTP ${res.status} ${res.statusText}` }
+        }
         alert(`❌ Lỗi: ${error.detail || "Không thể generate audio"}`);
+        console.error("Audio generate failed:", res.status, res.statusText, error)
       }
     } catch (e) {
       console.error(e);

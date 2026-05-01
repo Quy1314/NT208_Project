@@ -18,11 +18,12 @@ from pydantic import BaseModel # Kept existing
 
 import models
 from database import get_db
+from services.audio_pipeline import generate_audio_from_text, get_audio_upload_dir, to_mp3_if_possible
 from auth import get_current_user
-from routers.audio import generate_audio_from_text
 
 # Tạo Router cho group API liên quan đến Dự án, có prefix là /api/projects
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
+FPT_TTS_MODEL = "fpt-ai-tts-v5"
 HF_TRANSLATION_URLS_BY_MODE = {
     "vi-to-en": [
         "https://router.huggingface.co/hf-inference/models/Helsinki-NLP/opus-mt-vi-en",
@@ -502,6 +503,7 @@ def create_project(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
     x_hf_api_key: str | None = Header(None, alias="X-HF-Api-Key"),
+    x_fpt_api_key: str | None = Header(None, alias="X-FPT-Api-Key"),
 ):
     """
     API Tạo Project mới và sinh nội dung bằng Hugging Face Model (FrostAura).
@@ -509,7 +511,7 @@ def create_project(
     Optional: header X-HF-Api-Key — key HF tạm của user (không lưu server).
     """
     # Check if model is audio model
-    audio_models = ["facebook/mms-tts-vie", "microsoft/speecht5_tts"]
+    audio_models = [FPT_TTS_MODEL]
     is_audio_model = data.model_name and data.model_name in audio_models
 
     # 1. Sinh nội dung theo mode:
@@ -554,12 +556,15 @@ def create_project(
             audio_bytes = generate_audio_from_text(
                 generated_content,
                 data.language,
-                hf_api_key=x_hf_api_key,
+                fpt_api_key=x_fpt_api_key,
             )
-            audio_filename = f"audio_{new_project.id}_{len(audio_bytes)}.wav"
-            audio_path = f"/tmp/{audio_filename}"
+            stored_bytes, ext = to_mp3_if_possible(audio_bytes)
+            audio_filename = f"audio_{new_project.id}_{int(time.time() * 1000)}.{ext}"
+            upload_dir = get_audio_upload_dir()
+            os.makedirs(upload_dir, exist_ok=True)
+            audio_path = os.path.join(upload_dir, audio_filename)
             with open(audio_path, "wb") as f:
-                f.write(audio_bytes)
+                f.write(stored_bytes)
             audio_file = models.AudioFile(
                 project_id=new_project.id,
                 title=f"Audio for {new_project.title}",

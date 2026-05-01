@@ -81,6 +81,19 @@ class AudioFile(Base):
     audio_url = Column(Text, nullable=False) 
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
+
+class AudioJob(Base):
+    __tablename__ = "audio_jobs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    prompt = Column(Text, nullable=False)
+    language = Column(String(20), nullable=False, server_default="vietnamese")
+    status = Column(String(20), nullable=False, server_default="queued", index=True)
+    result_path = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
 # ==========================================
 # PYDANTIC SCHEMAS (Data Validation Models)
 # ==========================================
@@ -150,7 +163,7 @@ class ExportTranslateResp(BaseModel):
     prompt: str
     content: str
 class AudioGenerateReq(BaseModel):
-    text: str
+    prompt: str  # Thay text thành prompt để AI hiểu và sinh nội dung
     language: Literal["vietnamese", "english"] = "vietnamese"
     voice: str = "female"  
 
@@ -164,3 +177,21 @@ class AudioResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AudioJobCreateReq(BaseModel):
+    prompt: str
+    language: Literal["vietnamese", "english"] = "vietnamese"
+
+
+class AudioJobCreateResp(BaseModel):
+    job_id: str
+    status: Literal["queued"]
+
+
+class AudioJobStatusResp(BaseModel):
+    job_id: str
+    status: Literal["queued", "processing", "done", "failed"]
+    audio_url: str | None = None
+    error: str | None = None
+    created_at: str
