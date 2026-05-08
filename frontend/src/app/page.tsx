@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import ChatComposer from "@/components/ChatComposer";
 
 export default function Page() {
-  redirect("/story");
+  return <ChatComposer />;
 }

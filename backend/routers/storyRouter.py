@@ -7,9 +7,7 @@ from database import get_db
 from auth import get_current_user
 from generation.story import generate_story_content
 
-# Dùng base prefix /api, module Story đi theo subpath /story.
-# Team khác có thể thêm module riêng như /comic, /clip, /music mà không đổi kiến trúc gốc.
-storyRouter = APIRouter(prefix="/api", tags=["Story"])
+router = APIRouter(prefix="/api/projects", tags=["Projects"])
 
 
 # Schema đã được chuyển qua models.py
@@ -34,7 +32,7 @@ def _build_recent_context(db: Session, project_id: str) -> str:
         )
     return "\n\n".join(blocks)
 
-@storyRouter.get("/story/", response_model=List[models.ProjectResponse])
+@router.get("/", response_model=List[models.ProjectResponse])
 def get_all_projects(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """
     API Lấy toàn bộ Project của User ĐANG ĐĂNG NHẬP.
@@ -54,7 +52,7 @@ def get_all_projects(db: Session = Depends(get_db), current_user: models.User = 
     ]
 
 
-@storyRouter.post("/story/", response_model=models.ProjectResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=models.ProjectResponse, status_code=status.HTTP_201_CREATED)
 def create_project(data: models.ProjectCreateReq, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """
     API Tạo Project mới và sinh nội dung bằng Hugging Face Model (FrostAura).
@@ -97,7 +95,7 @@ def create_project(data: models.ProjectCreateReq, db: Session = Depends(get_db),
     )
 
 
-@storyRouter.post("/story/{project_id}/continue", response_model=models.ProjectResponse)
+@router.post("/{project_id}/continue", response_model=models.ProjectResponse)
 def continue_project(project_id: str, data: models.ProjectContinueReq, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
@@ -141,7 +139,7 @@ def continue_project(project_id: str, data: models.ProjectContinueReq, db: Sessi
     )
 
 
-@storyRouter.get("/story/{project_id}", response_model=models.ProjectResponse)
+@router.get("/{project_id}", response_model=models.ProjectResponse)
 def get_project_by_id(project_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """
     API Lấy chi tiết 1 Project theo ID.
@@ -165,7 +163,7 @@ def get_project_by_id(project_id: str, db: Session = Depends(get_db), current_us
     )
 
 
-@storyRouter.get("/story/{project_id}/contexts")
+@router.get("/{project_id}/contexts")
 def get_project_contexts(project_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
@@ -195,7 +193,7 @@ def get_project_contexts(project_id: str, db: Session = Depends(get_db), current
     }
 
 
-@storyRouter.delete("/story/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(project_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """
     API Xóa 1 Project theo ID.

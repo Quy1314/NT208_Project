@@ -81,7 +81,7 @@ async def anti_spam_middleware(request: Request, call_next):
 
 # Gắn các router con
 app.include_router(auth.router)
-app.include_router(storyRouter.storyRouter)
+app.include_router(storyRouter.router)
 app.include_router(teams.router)
 
 @app.get("/")
