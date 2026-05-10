@@ -34,6 +34,18 @@ interface TeamWorkspace {
   name: string;
 }
 
+type ChatMode = "text" | "video";
+
+interface VideoChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  prompt?: string;
+  videoUrl?: string;
+  assistantText?: string;
+  error?: string;
+  loading?: boolean;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -65,6 +77,9 @@ export default function DashboardPage() {
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [isDark, setIsDark] = useState(true);
+  const [chatMode, setChatMode] = useState<ChatMode>("text");
+  const [videoMessages, setVideoMessages] = useState<VideoChatMessage[]>([]);
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
@@ -179,6 +194,7 @@ export default function DashboardPage() {
         setSelectedProject(data);
         setIsCreating(false);
         setContinuePrompt("");
+        setVideoMessages([]);
       } else if (res.status === 401) {
         handleLogout();
       }
@@ -341,6 +357,96 @@ export default function DashboardPage() {
     }
   };
 
+  const handleVideoGenerate = async () => {
+    const raw = selectedProject ? continuePrompt : prompt;
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      alert("Vui lòng nhập mô tả video.");
+      return;
+    }
+    if (isGeneratingVideo) return;
+
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    const assistantId = `a-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+    setVideoMessages((prev) => [
+      ...prev,
+      { id: `u-${assistantId}`, role: "user", prompt: trimmed },
+      { id: assistantId, role: "assistant", loading: true }
+    ]);
+    setIsGeneratingVideo(true);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/video/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token && token !== "undefined" && token !== "null" ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ prompt: trimmed })
+      });
+      if (res.status === 401) {
+        handleLogout();
+        return;
+      }
+      const data = await res.json();
+
+      if (data.error) {
+        setVideoMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, loading: false, error: String(data.error) } : m
+          )
+        );
+        return;
+      }
+
+      if (!res.ok) {
+        const detail =
+          typeof data.detail === "string"
+            ? data.detail
+            : Array.isArray(data.detail)
+              ? data.detail.map((d: { msg?: string }) => d.msg).join(", ")
+              : "Không thể tạo video.";
+        setVideoMessages((prev) =>
+          prev.map((m) => (m.id === assistantId ? { ...m, loading: false, error: detail } : m))
+        );
+        return;
+      }
+
+      setVideoMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? {
+                ...m,
+                loading: false,
+                videoUrl: data.video_url as string,
+                assistantText: (data.message as string) || undefined
+              }
+            : m
+        )
+      );
+      if (selectedProject) setContinuePrompt("");
+      else setPrompt("");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Lỗi kết nối.";
+      setVideoMessages((prev) =>
+        prev.map((m) => (m.id === assistantId ? { ...m, loading: false, error: msg } : m))
+      );
+    } finally {
+      setIsGeneratingVideo(false);
+    }
+  };
+
+  const handleBottomSubmit = () => {
+    if (chatMode === "video") {
+      void handleVideoGenerate();
+    } else if (selectedProject) {
+      void handleContinueProject();
+    } else {
+      void handleCreateProject();
+    }
+  };
+
   function handleLogout() {
     // Quét dọn sạch sẽ tất cả session & local storage (trừ cái remembered_email)
     localStorage.removeItem("access_token");
@@ -385,6 +491,51 @@ export default function DashboardPage() {
       setChangingPassword(false);
     }
   };
+
+  const renderVideoThread = () => (
+    <div className="space-y-6">
+      {videoMessages.map((m) =>
+        m.role === "user" ? (
+          <div key={m.id} className="flex justify-end px-1">
+            <div className="bg-blue-50 text-blue-900 p-4 rounded-xl shadow-sm border border-blue-100 max-w-[85%]">
+              <p className="font-semibold text-xs text-blue-700 mb-1 uppercase tracking-wider">Your Prompt</p>
+              <p className="text-sm font-medium whitespace-pre-wrap">{m.prompt}</p>
+            </div>
+          </div>
+        ) : (
+          <div key={m.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-slate-700 w-full max-w-[95%]">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center text-white">
+                <Sparkles size={12} />
+              </div>
+              <span className="font-bold text-sm">Assistant</span>
+            </div>
+            {m.loading && (
+              <div className="flex items-center gap-2 text-slate-400 animate-pulse">
+                <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+                <div className="w-2 h-2 bg-slate-400 rounded-full animation-delay-200"></div>
+                <div className="w-2 h-2 bg-slate-400 rounded-full animation-delay-400"></div>
+                <span className="ml-2 text-sm">Đang tạo video...</span>
+              </div>
+            )}
+            {m.error && <p className="text-sm text-red-600 whitespace-pre-wrap leading-relaxed">{m.error}</p>}
+            {!m.loading && m.videoUrl && (
+              <div className="space-y-3">
+                {m.assistantText && <p className="text-sm text-slate-600 whitespace-pre-wrap">{m.assistantText}</p>}
+                <video
+                  src={m.videoUrl}
+                  controls
+                  playsInline
+                  className="w-full max-w-full rounded-xl border border-slate-200 max-h-[min(70vh,520px)] bg-black object-contain"
+                />
+              </div>
+            )}
+          </div>
+        )
+      )}
+    </div>
+  );
+
   return (
     <div className={`flex h-screen p-2 sm:p-4 font-sans ${isDark ? "bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-900"}`}>
       {/* MAIN APP CONTAINER */}
@@ -406,7 +557,14 @@ export default function DashboardPage() {
 
           {/* New Project Button */}
           <button
-            onClick={() => { setIsCreating(true); setSelectedProject(null); setTitle(""); setPrompt(""); setContinuePrompt(""); }}
+            onClick={() => {
+              setIsCreating(true);
+              setSelectedProject(null);
+              setTitle("");
+              setPrompt("");
+              setContinuePrompt("");
+              setVideoMessages([]);
+            }}
             className={`flex items-center gap-2 transition-colors w-full p-2.5 rounded-xl text-sm font-semibold shadow-sm mb-6 ${
               isDark
                 ? "bg-slate-900 border border-slate-700 text-slate-200 hover:border-blue-400 hover:text-blue-300"
@@ -585,48 +743,81 @@ export default function DashboardPage() {
           {/* CENTER STAGE (Greeting & Cards) */}
           <main className="flex-1 overflow-y-auto px-4 pb-40">
             {selectedProject ? (
-              <div className="max-w-3xl mx-auto pt-10 px-4">
-                <div className="mb-6 flex items-center justify-between px-4">
-                  <h2 className="text-2xl font-bold text-slate-800">{selectedProject.title}</h2>
-                  <button
-                    onClick={() => handleDeleteProject(selectedProject.id)}
-                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100"
-                  >
-                    Xóa project
-                  </button>
+              chatMode === "video" ? (
+                <div className="max-w-3xl mx-auto pt-10 px-4">
+                  <div className="mb-6 flex items-center justify-between px-4">
+                    <h2 className="text-2xl font-bold text-slate-800">{selectedProject.title}</h2>
+                    <button
+                      onClick={() => handleDeleteProject(selectedProject.id)}
+                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100"
+                    >
+                      Xóa project
+                    </button>
+                  </div>
+                  {renderVideoThread()}
+                  {videoMessages.length === 0 && (
+                    <p className="text-center text-slate-500 text-sm font-medium mt-4">
+                      Nhập mô tả video dưới khung chat và nhấn Generate.
+                    </p>
+                  )}
                 </div>
-                <div className="bg-blue-50 text-blue-900 p-4 rounded-xl mb-6 shadow-sm border border-blue-100 self-end ml-auto max-w-[85%]">
-                  <p className="font-semibold text-xs text-blue-700 mb-1 uppercase tracking-wider">Your Prompt</p>
-                  <p className="text-sm font-medium whitespace-pre-wrap">{selectedProject.prompt}</p>
-                </div>
+              ) : (
+                <div className="max-w-3xl mx-auto pt-10 px-4">
+                  <div className="mb-6 flex items-center justify-between px-4">
+                    <h2 className="text-2xl font-bold text-slate-800">{selectedProject.title}</h2>
+                    <button
+                      onClick={() => handleDeleteProject(selectedProject.id)}
+                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100"
+                    >
+                      Xóa project
+                    </button>
+                  </div>
+                  <div className="bg-blue-50 text-blue-900 p-4 rounded-xl mb-6 shadow-sm border border-blue-100 self-end ml-auto max-w-[85%]">
+                    <p className="font-semibold text-xs text-blue-700 mb-1 uppercase tracking-wider">Your Prompt</p>
+                    <p className="text-sm font-medium whitespace-pre-wrap">{selectedProject.prompt}</p>
+                  </div>
 
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-slate-700 mb-8 w-full max-w-[95%]">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center text-white">
-                      <Sparkles size={12} />
-                    </div>
-                    <span className="font-bold text-sm">AI Generated Content</span>
-                  </div>
-                  <div className="prose prose-sm max-w-none prose-slate">
-                    {selectedProject.content === "Waiting for LLM generation..." ? (
-                      <div className="flex items-center gap-2 text-slate-400 animate-pulse">
-                        <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
-                        <div className="w-2 h-2 bg-slate-400 rounded-full animation-delay-200"></div>
-                        <div className="w-2 h-2 bg-slate-400 rounded-full animation-delay-400"></div>
-                        <span className="ml-2 text-sm">AI is writing your story...</span>
+                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-slate-700 mb-8 w-full max-w-[95%]">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center text-white">
+                        <Sparkles size={12} />
                       </div>
-                    ) : (
-                      <p className="whitespace-pre-wrap leading-relaxed">{selectedProject.content}</p>
-                    )}
+                      <span className="font-bold text-sm">AI Generated Content</span>
+                    </div>
+                    <div className="prose prose-sm max-w-none prose-slate">
+                      {selectedProject.content === "Waiting for LLM generation..." ? (
+                        <div className="flex items-center gap-2 text-slate-400 animate-pulse">
+                          <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
+                          <div className="w-2 h-2 bg-slate-400 rounded-full animation-delay-200"></div>
+                          <div className="w-2 h-2 bg-slate-400 rounded-full animation-delay-400"></div>
+                          <span className="ml-2 text-sm">AI is writing your story...</span>
+                        </div>
+                      ) : (
+                        <p className="whitespace-pre-wrap leading-relaxed">{selectedProject.content}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )
             ) : isCreating ? (
-              <div className="max-w-3xl mx-auto pt-10 px-4 h-full flex flex-col justify-center">
-                <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">Create New Project</h2>
-                <p className="text-slate-500 font-medium mb-10">Instruct the AI to generate a creative story below.</p>
-                {/* Ẩn cục bộ form nhập Title gốc đi, vì giờ đã Auto-generate từ Prompt ở dưới */}
-              </div>
+              chatMode === "video" ? (
+                <div className="max-w-3xl mx-auto pt-10 px-4 h-full flex flex-col justify-center">
+                  <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">Create New Project</h2>
+                  <p className="text-slate-500 font-medium mb-8">
+                    Chế độ Video: nhập mô tả bên dưới để tạo video (không tạo nội dung chữ cho project).
+                  </p>
+                  {renderVideoThread()}
+                  {videoMessages.length === 0 && (
+                    <p className="text-slate-500 text-sm font-medium text-center">Nhập prompt video và nhấn Generate.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="max-w-3xl mx-auto pt-10 px-4 h-full flex flex-col justify-center">
+                  <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">Create New Project</h2>
+                  <p className="text-slate-500 font-medium mb-10">Instruct the AI to generate a creative story below.</p>
+                  {/* Ẩn cục bộ form nhập Title gốc đi, vì giờ đã Auto-generate từ Prompt ở dưới */}
+                </div>
+              )
             ) : (
               <div className="max-w-4xl mx-auto h-full flex flex-col justify-center items-center pt-10 lg:pt-20">
                 {/* Avatar & Greeting */}
@@ -638,7 +829,10 @@ export default function DashboardPage() {
                   Select a project from the sidebar or create a new one to begin.
                 </p>
                 <button
-                  onClick={() => setIsCreating(true)}
+                  onClick={() => {
+                    setIsCreating(true);
+                    setVideoMessages([]);
+                  }}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-sm transition-colors flex items-center gap-2">
                   <Plus size={18} /> Start Creative Project
                 </button>
@@ -654,8 +848,14 @@ export default function DashboardPage() {
                 {/* Input Area */}
                 <textarea
                   value={selectedProject ? continuePrompt : prompt}
-                  onChange={(e) => selectedProject ? setContinuePrompt(e.target.value) : setPrompt(e.target.value)}
-                  placeholder={selectedProject ? "Nhập yêu cầu để AI viết tiếp dự án này..." : "Describe your story, characters, and plot here..."}
+                  onChange={(e) => (selectedProject ? setContinuePrompt(e.target.value) : setPrompt(e.target.value))}
+                  placeholder={
+                    chatMode === "video"
+                      ? "Mô tả cảnh / nội dung video bạn muốn tạo..."
+                      : selectedProject
+                        ? "Nhập yêu cầu để AI viết tiếp dự án này..."
+                        : "Describe your story, characters, and plot here..."
+                  }
                   className="w-full max-h-32 min-h-[60px] p-3 text-[#f3f4f6] focus:outline-none resize-none placeholder-[#6b7280] bg-transparent font-medium"
                 />
 
@@ -692,7 +892,31 @@ export default function DashboardPage() {
                   </div>
 
                   {/* Right: Original Tools & Generate */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <div className="flex rounded-lg border border-[#3f3f46] overflow-hidden text-xs font-semibold shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setChatMode("text")}
+                        className={`px-3 py-1.5 transition-colors ${
+                          chatMode === "text"
+                            ? "bg-indigo-600 text-white"
+                            : "bg-[#2a2c31] text-[#a1a1aa] hover:text-white"
+                        }`}
+                      >
+                        Text
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setChatMode("video")}
+                        className={`px-3 py-1.5 transition-colors border-l border-[#3f3f46] ${
+                          chatMode === "video"
+                            ? "bg-indigo-600 text-white"
+                            : "bg-[#2a2c31] text-[#a1a1aa] hover:text-white"
+                        }`}
+                      >
+                        Video
+                      </button>
+                    </div>
                     <button className="flex items-center gap-1.5 text-xs font-semibold text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31] px-2 py-1.5 rounded-lg transition-colors">
                       <Paperclip size={14} /> Attach
                     </button>
@@ -701,10 +925,37 @@ export default function DashboardPage() {
                     </button>
 
                     <button
-                      onClick={selectedProject ? handleContinueProject : handleCreateProject}
-                      disabled={selectedProject ? isContinuing : isGenerating}
-                      className={`flex items-center gap-1.5 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all shadow-md ml-2 ${(selectedProject ? isContinuing : isGenerating) ? 'bg-indigo-500/50 cursor-not-allowed' : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 hover:shadow-lg'}`}>
-                      {(selectedProject ? isContinuing : isGenerating) ? (
+                      type="button"
+                      onClick={handleBottomSubmit}
+                      disabled={
+                        chatMode === "video"
+                          ? isGeneratingVideo
+                          : selectedProject
+                            ? isContinuing
+                            : isGenerating
+                      }
+                      className={`flex items-center gap-1.5 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all shadow-md ml-2 ${
+                        (chatMode === "video"
+                          ? isGeneratingVideo
+                          : selectedProject
+                            ? isContinuing
+                            : isGenerating)
+                          ? "bg-indigo-500/50 cursor-not-allowed"
+                          : "bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 hover:shadow-lg"
+                      }`}
+                    >
+                      {chatMode === "video" ? (
+                        isGeneratingVideo ? (
+                          <>
+                            <div className="w-4 h-4 rounded-full border-2 border-white/80 border-t-transparent animate-spin"></div>
+                            Đang tạo video...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={16} /> Generate
+                          </>
+                        )
+                      ) : (selectedProject ? isContinuing : isGenerating) ? (
                         <>
                           <div className="w-4 h-4 rounded-full border-2 border-white/80 border-t-transparent animate-spin"></div>
                           {selectedProject ? "Đang viết tiếp..." : "Generating..."}

@@ -1,37 +1,51 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+
 from database import engine, Base
 import models
 import auth
-from routers import projects, teams
-from sqlalchemy import text
+from routers import projects, teams, video
 
-# Tạo sẵn toàn bộ bảng trong database (dựa trên các classes ở models.py) nếu chưa tồn tại
+
+# Tạo sẵn toàn bộ bảng trong database nếu chưa tồn tại
 Base.metadata.create_all(bind=engine)
+
+# Tạo folder outputs nếu cần lưu file video local
+os.makedirs("outputs", exist_ok=True)
 
 # Khởi tạo application FastAPI chính
 app = FastAPI()
 
-# Cấu hình CORS Middleware: Cho phép Frontend (chạy ở localhost:3000) gọi API qua Backend (8000)
+# Mount folder outputs để frontend có thể truy cập file tĩnh nếu cần
+app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
+
+# Cấu hình CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"], # Các domain được phép gọi API
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
-    allow_methods=["*"], # Cho phép tất cả các method (GET, POST, PUT, DELETE,...)
-    allow_headers=["*"], # Cho phép tất cả các header parameter
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Rate limit in-memory:
-# - Tối đa 10 request / 5 giây cho mỗi client.
-# - Nếu vượt ngưỡng: chặn 5 phút.
+
+# Rate limit in-memory
 WINDOW_SECONDS = 5
 MAX_REQUESTS_IN_WINDOW = 10
 BLOCK_SECONDS = 300
 request_windows = defaultdict(deque)
 blocked_until = {}
+
 
 @app.middleware("http")
 async def anti_spam_middleware(request: Request, call_next):
@@ -55,16 +69,17 @@ async def anti_spam_middleware(request: Request, call_next):
             headers={"Retry-After": str(retry_after)},
         )
 
-    # Hết block thì dọn key cũ.
     if block_expiry and now >= block_expiry:
         blocked_until.pop(client_ip, None)
 
     window = request_windows[client_ip]
     cutoff = now - timedelta(seconds=WINDOW_SECONDS)
+
     while window and window[0] < cutoff:
         window.popleft()
 
     window.append(now)
+
     if len(window) > MAX_REQUESTS_IN_WINDOW:
         blocked_until[client_ip] = now + timedelta(seconds=BLOCK_SECONDS)
         request_windows[client_ip].clear()
@@ -79,27 +94,31 @@ async def anti_spam_middleware(request: Request, call_next):
 
     return await call_next(request)
 
+
 # Gắn các router con
 app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(teams.router)
+app.include_router(video.router)
+
 
 @app.get("/")
 def read_root():
-    # API cơ bản để kiểm tra server có đang chạy ko
     return {"message": "Welcome to the AI Content Generator API"}
+
 
 @app.get("/test-db")
 def test_db():
     """
-    API dùng để test kết nối tới database Supabase PostgreSQL. 
+    API dùng để test kết nối tới database Supabase PostgreSQL.
     Nó sẽ thử chạy câu lệnh SELECT 1 cơ bản nhất.
     """
     try:
-        # Sử dụng context manager (with) để đảm bảo connection luôn được đóng sau khi query xong
         with engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
-            # scalar() lấy giá trị đầu tiên của dòng đầu tiên trả về
-            return {"message": "Database connection successful", "result": result.scalar()} 
+            return {
+                "message": "Database connection successful",
+                "result": result.scalar(),
+            }
     except Exception as e:
         return {"message": "Database connection failed", "error": str(e)}
