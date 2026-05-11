@@ -8,3 +8,9 @@ python-jose[cryptography]
 python-multipart
 huggingface_hub
 pydantic
+pydub
+requests
+librosa
+soundfile
+scipy
+

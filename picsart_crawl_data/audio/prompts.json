@@ -1,0 +1,8 @@
+[
+  {
+    "category": "audio",
+    "model_mode": "Feature summary",
+    "prompt_text": "Audio mode includes text-to-speech with ElevenLabs voices, sound effect generation, and music creation.",
+    "source_url": "https://picsart.com/vi/create"
+  }
+]
