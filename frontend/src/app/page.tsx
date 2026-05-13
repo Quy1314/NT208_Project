@@ -67,6 +67,59 @@ interface VideoChatMessage {
   loading?: boolean;
 }
 
+const VIDEO_CONTEXT_MAX_CHARS = 12000;
+
+/** Build optional project/chat grounding for video generation (server merges into the fal prompt). */
+function buildVideoGenerateRequestBody(
+  prompt: string,
+  selectedProject: Project | null,
+  isCreating: boolean,
+  draftTitle: string,
+  videoMessages: VideoChatMessage[]
+): { prompt: string; project_id?: string; context?: string; project_title?: string } {
+  const parts: string[] = [];
+
+  if (selectedProject) {
+    const setup = selectedProject.prompt?.trim();
+    if (setup) parts.push(`Story setup / original prompt:\n${setup}`);
+    const body = selectedProject.content?.trim();
+    if (body && body !== "Waiting for LLM generation...") {
+      let slice = body;
+      if (slice.length > 8000) slice = `${slice.slice(0, 8000)}\n[...story truncated]`;
+      parts.push(`Generated story content:\n${slice}`);
+    }
+  } else if (isCreating && draftTitle.trim()) {
+    parts.push(`Working title:\n${draftTitle.trim()}`);
+  }
+
+  const history: string[] = [];
+  for (const m of videoMessages) {
+    if (m.role === "user" && m.prompt?.trim()) history.push(`User (video): ${m.prompt.trim()}`);
+    else if (m.role === "assistant" && !m.loading) {
+      if (m.assistantText?.trim()) history.push(`Assistant: ${m.assistantText.trim()}`);
+      if (m.error) history.push(`Assistant (error): ${m.error}`);
+    }
+  }
+  if (history.length) parts.push(`Prior video chat in this session:\n${history.join("\n")}`);
+
+  let context = parts.join("\n\n").trim();
+  if (context.length > VIDEO_CONTEXT_MAX_CHARS) {
+    context = `${context.slice(0, VIDEO_CONTEXT_MAX_CHARS)}\n[...truncated]`;
+  }
+
+  const project_title =
+    selectedProject?.title?.trim() || (isCreating ? draftTitle.trim() : "") || undefined;
+  const project_id = selectedProject?.id;
+
+  const payload: { prompt: string; project_id?: string; context?: string; project_title?: string } = {
+    prompt,
+  };
+  if (project_id) payload.project_id = project_id;
+  if (project_title) payload.project_title = project_title;
+  if (context) payload.context = context;
+  return payload;
+}
+
 type WorkspaceComposerDockProps = {
   isVisible: boolean;
   isMainAtBottom: boolean;
@@ -784,10 +837,17 @@ export default function DashboardPage() {
     setIsGeneratingVideo(true);
 
     try {
+      const videoBody = buildVideoGenerateRequestBody(
+        trimmed,
+        selectedProject,
+        isCreating,
+        title,
+        videoMessages
+      );
       const res = await fetch(`${API_BASE_URL}/api/video/generate`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify({ prompt: trimmed }),
+        body: JSON.stringify(videoBody),
       });
       if (res.status === 401) {
         handleLogout();
