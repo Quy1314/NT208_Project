@@ -13,8 +13,9 @@ from sqlalchemy import text
 
 from database import engine, Base
 import models
+import lore.db_models  # noqa: F401 — registers canonical lore ORM tables on Base.metadata
 import auth
-from routers import projects, teams, video
+from routers import projects, teams, audio, canon, video
 
 
 # Tạo sẵn toàn bộ bảng trong database nếu chưa tồn tại
@@ -29,7 +30,7 @@ app = FastAPI()
 # Mount folder outputs để frontend có thể truy cập file tĩnh nếu cần
 app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
 
-# Cấu hình CORS Middleware
+# Cấu hình CORS Middleware: Cho phép Frontend gọi API qua Backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -95,10 +96,12 @@ async def anti_spam_middleware(request: Request, call_next):
     return await call_next(request)
 
 
-# Gắn các router con
+# Đăng ký routers
 app.include_router(auth.router)
 app.include_router(projects.router)
+app.include_router(canon.router)
 app.include_router(teams.router)
+app.include_router(audio.router)
 app.include_router(video.router)
 
 

@@ -78,7 +78,7 @@ def ensure_bloom_loaded(db: Session):
 
 # Hàm phụ trợ dùng để băm (hash) mật khẩu gốc thành chuỗi bảo mật an toàn
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    return pwd_context.hash(password[:72])
 
 @router.post("/register")
 def register_user(user: models.UserRegister, db: Session = Depends(get_db)):
@@ -137,7 +137,7 @@ def check_user_exists(email: str = Query(..., min_length=3), db: Session = Depen
 
 # Hàm kiểm chứng xem password nhập vào có khớp với mã băm lấy trong DB không
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    return pwd_context.verify(plain_password[:72], hashed_password)
 
 # Hàm sinh JWT Token có gắn kèm thông tin cơ bản và thời gian hết hạn
 def create_access_token(data: dict):

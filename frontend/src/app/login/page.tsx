@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AuthShell from "@/components/auth/AuthShell";
 import { API_BASE_URL } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function LoginPage() {
     const router = useRouter(); // Dùng để chuyển hướng trang
@@ -69,10 +71,10 @@ export default function LoginPage() {
                 localStorage.removeItem("remembered_email"); // Xóa email nếu không tick
             }
 
-            // Chuyển hướng
-            router.push("/");
-        } catch (err: any) {
-            setError(err.message);
+            // Sau đăng nhập: vào workspace
+            router.push("/workspace");
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Login failed");
         } finally {
             setLoading(false);
         }
@@ -90,8 +92,8 @@ export default function LoginPage() {
                 {error && <div className={`rounded-lg border p-3 text-sm ${isDark ? "border-red-500/40 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
                 <div>
                     <label className={`mb-1.5 block text-xs uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-600"}`} htmlFor="email">Email</label>
-                    <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                        className={`w-full rounded-lg border px-4 py-3 text-sm focus:border-blue-500 focus:outline-none ${
+                    <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                        className={`h-11 px-4 py-3 text-sm ${
                             isDark
                               ? "border-slate-700 bg-slate-950 text-white placeholder-slate-500"
                               : "border-slate-300 bg-white text-slate-900 placeholder-slate-400"
@@ -103,8 +105,8 @@ export default function LoginPage() {
                         <label className={`text-xs uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-600"}`} htmlFor="password">Password</label>
                         <Link href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300">Forgot password?</Link>
                     </div>
-                    <input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-                        className={`w-full rounded-lg border px-4 py-3 text-sm focus:border-blue-500 focus:outline-none ${
+                    <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+                        className={`h-11 px-4 py-3 text-sm ${
                             isDark
                               ? "border-slate-700 bg-slate-950 text-white placeholder-slate-500"
                               : "border-slate-300 bg-white text-slate-900 placeholder-slate-400"
@@ -115,10 +117,10 @@ export default function LoginPage() {
                     <input id="remember-me" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className={`h-4 w-4 rounded ${isDark ? "border-slate-600 bg-slate-900" : "border-slate-300 bg-white"}`} />
                     Remember me
                 </label>
-                <button type="submit" disabled={loading}
-                    className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60">
+                <Button type="submit" disabled={loading}
+                    className="h-11 w-full bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">
                     {loading ? "Logging in..." : "Log in"}
-                </button>
+                </Button>
             </form>
             <p className={`mt-6 text-center text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
                 Chưa có tài khoản? <Link href="/register" className="font-semibold text-blue-400 hover:text-blue-300">Đăng ký</Link>

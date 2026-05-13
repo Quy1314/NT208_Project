@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, Text, ForeignKey, TIMESTAMP, Boolean
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 import uuid
@@ -26,6 +27,8 @@ class Project(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
+    context_entries = relationship("ProjectContextEntry", back_populates="project")
+
 
 class PasswordResetToken(Base):
     __tablename__ = "password_reset_tokens"
@@ -47,6 +50,8 @@ class ProjectContextEntry(Base):
     generated_content = Column(Text, nullable=False)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
+    project = relationship("Project", back_populates="context_entries")
+
 
 class TeamWorkspace(Base):
     __tablename__ = "team_workspaces"
@@ -64,6 +69,29 @@ class ProjectTeamToken(Base):
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     team_id = Column(UUID(as_uuid=True), ForeignKey("team_workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
     token = Column(String(255), nullable=False, unique=True, index=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class AudioFile(Base):
+    __tablename__ = "audio_files"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    audio_url = Column(Text, nullable=False) 
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class AudioJob(Base):
+    __tablename__ = "audio_jobs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    prompt = Column(Text, nullable=False)
+    language = Column(String(20), nullable=False, server_default="vietnamese")
+    status = Column(String(20), nullable=False, server_default="queued", index=True)
+    result_path = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 # ==========================================
@@ -106,10 +134,12 @@ class ProjectCreateReq(BaseModel):
     title: str
     prompt: str
     language: Literal["vietnamese", "english"] = "vietnamese"
+    model_name: str | None = None  # Hugging Face Inference model id (optional)
 
 class ProjectContinueReq(BaseModel):
     prompt: str
     language: Literal["vietnamese", "english"] = "vietnamese"
+    model_name: str | None = None
 
 class ProjectResponse(BaseModel):
     id: str
@@ -119,3 +149,49 @@ class ProjectResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+class ExportTranslateReq(BaseModel):
+    title: str
+    prompt: str
+    content: str
+    mode: Literal["vi-to-en", "en-to-vi"]
+
+
+class ExportTranslateResp(BaseModel):
+    title: str
+    prompt: str
+    content: str
+class AudioGenerateReq(BaseModel):
+    prompt: str  # Thay text thành prompt để AI hiểu và sinh nội dung
+    language: Literal["vietnamese", "english"] = "vietnamese"
+    voice: str = "female"  
+
+
+class AudioResponse(BaseModel):
+    id: str
+    project_id: str
+    title: str
+    audio_url: str
+    created_at: str
+
+    class Config:
+        from_attributes = True
+
+
+class AudioJobCreateReq(BaseModel):
+    prompt: str
+    language: Literal["vietnamese", "english"] = "vietnamese"
+
+
+class AudioJobCreateResp(BaseModel):
+    job_id: str
+    status: Literal["queued"]
+
+
+class AudioJobStatusResp(BaseModel):
+    job_id: str
+    status: Literal["queued", "processing", "done", "failed"]
+    audio_url: str | None = None
+    error: str | None = None
+    created_at: str
