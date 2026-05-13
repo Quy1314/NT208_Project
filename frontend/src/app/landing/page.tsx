@@ -3,10 +3,43 @@
 import Link from "next/link";
 import Image from "next/image";
 import { LANDING_TEMPLATES } from "@/lib/landingTemplates";
-import { useMemo, useState } from "react";
+import { ChevronDown, LayoutDashboard, LogOut } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export default function LandingPage() {
   const [activeCategory, setActiveCategory] = useState<"all" | "image" | "video">("all");
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [userEmail] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return localStorage.getItem("user_email") || sessionStorage.getItem("user_email") || "";
+  });
+  const [hasToken] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    return Boolean(token && token !== "undefined" && token !== "null");
+  });
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const isAuthenticated = hasToken;
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("user_email");
+    sessionStorage.removeItem("access_token");
+    sessionStorage.removeItem("user_email");
+    localStorage.removeItem("remembered_email");
+    window.location.href = "/logout";
+  };
+
   const filteredTemplates = useMemo(() => {
     if (activeCategory === "all") return LANDING_TEMPLATES;
     return LANDING_TEMPLATES.filter((tpl) => tpl.category === activeCategory);
@@ -21,14 +54,53 @@ export default function LandingPage() {
             <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">AI Agent Studio</p>
             <h1 className="mt-1 text-lg font-bold sm:text-xl">Không gian làm việc từ Prompt đến Thiết kế</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/login" className="rounded-lg border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/10">
-              Đăng nhập
-            </Link>
-            <Link href="/register" className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300">
-              Đăng ký
-            </Link>
-          </div>
+          {isAuthenticated ? (
+            <div className="relative" ref={userMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsUserMenuOpen((prev) => !prev)}
+                className="flex items-center gap-2 rounded-full border border-white/15 bg-white/5 p-1.5 pr-3 transition hover:bg-white/10"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-100 font-bold uppercase text-cyan-700">
+                  {(userEmail || "User").charAt(0)}
+                </div>
+                <span className="hidden max-w-[140px] truncate text-sm font-semibold sm:block">{userEmail || "User"}</span>
+                <ChevronDown size={14} className="text-slate-300" />
+              </button>
+              {isUserMenuOpen && (
+                <div className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-white/10 bg-[#0b1220] py-2 shadow-2xl shadow-black/40">
+                  <div className="border-b border-white/10 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Signed in as</p>
+                    <p className="truncate text-sm font-bold text-slate-100">{userEmail || "User"}</p>
+                  </div>
+                  <Link
+                    href="/workspace"
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-200 transition hover:bg-white/10"
+                  >
+                    <LayoutDashboard size={16} />
+                    Vào Workspace
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="mt-1 flex w-full items-center gap-3 border-t border-white/10 px-4 py-2.5 text-sm text-red-300 transition hover:bg-red-500/10"
+                  >
+                    <LogOut size={16} />
+                    Đăng xuất
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Link href="/login" className="rounded-lg border border-white/15 px-4 py-2 text-sm font-semibold hover:bg-white/10">
+                Đăng nhập
+              </Link>
+              <Link href="/register" className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300">
+                Đăng ký
+              </Link>
+            </div>
+          )}
         </header>
 
         <div className="mb-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
