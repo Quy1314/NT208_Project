@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AuthShell from "@/components/auth/AuthShell";
 import { API_BASE_URL } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function RegisterPage() {
     const router = useRouter(); // Dùng để chuyển hướng trang bằng code (redirect)
@@ -79,9 +81,9 @@ export default function RegisterPage() {
 
             // Nếu API đăng ký thành công, lập tức chuyển hướng sang trang /login
             router.push("/login");
-        } catch (err: any) {
+        } catch (err: unknown) {
             // Bắt và lưu lại báo lỗi từ backend để hiện ra trên UI
-            setError(err.message);
+            setError(err instanceof Error ? err.message : "Registration failed");
         } finally {
             setLoading(false); // Dù lỗi hay ko thì cũng mở khóa nút lại
         }
@@ -99,8 +101,8 @@ export default function RegisterPage() {
                 {error && <div className={`rounded-lg border p-3 text-sm ${isDark ? "border-red-500/40 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
                 <div>
                     <label className={`mb-1.5 block text-xs uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-600"}`} htmlFor="email">Email</label>
-                    <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                        className={`w-full rounded-lg border px-4 py-3 text-sm focus:border-blue-500 focus:outline-none ${
+                    <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                        className={`h-11 px-4 py-3 text-sm ${
                             isDark
                               ? "border-slate-700 bg-slate-950 text-white placeholder-slate-500"
                               : "border-slate-300 bg-white text-slate-900 placeholder-slate-400"
@@ -112,18 +114,18 @@ export default function RegisterPage() {
                 </div>
                 <div>
                     <label className={`mb-1.5 block text-xs uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-600"}`} htmlFor="password">Password</label>
-                    <input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-                        className={`w-full rounded-lg border px-4 py-3 text-sm focus:border-blue-500 focus:outline-none ${
+                    <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+                        className={`h-11 px-4 py-3 text-sm ${
                             isDark
                               ? "border-slate-700 bg-slate-950 text-white placeholder-slate-500"
                               : "border-slate-300 bg-white text-slate-900 placeholder-slate-400"
                         }`}
                         placeholder="Tối thiểu 8 ký tự" />
                 </div>
-                <button type="submit" disabled={loading}
-                    className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60">
+                <Button type="submit" disabled={loading}
+                    className="h-11 w-full bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">
                     {loading ? "Creating account..." : "Sign up"}
-                </button>
+                </Button>
             </form>
             <p className={`mt-6 text-center text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
                 Đã có tài khoản? <Link href="/login" className="font-semibold text-blue-400 hover:text-blue-300">Đăng nhập</Link>

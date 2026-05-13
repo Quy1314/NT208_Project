@@ -5,8 +5,9 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
 import models
+import lore.db_models  # noqa: F401 — registers canonical lore ORM tables on Base.metadata
 import auth
-from routers import projects, teams, audio
+from routers import projects, teams, audio, canon
 from sqlalchemy import text
 
 # Tạo sẵn toàn bộ bảng trong database (dựa trên các classes ở models.py) nếu chưa tồn tại
@@ -15,12 +16,14 @@ Base.metadata.create_all(bind=engine)
 # Khởi tạo application FastAPI chính
 app = FastAPI()
 
-# Đăng ký routers
+# Đăng ký routers (tránh trùng lặp include projects)
+app.include_router(auth.router)
 app.include_router(projects.router)
+app.include_router(canon.router)
 app.include_router(teams.router)
 app.include_router(audio.router)
 
-# Cấu hình CORS Middleware: Cho phép Frontend (chạy ở localhost:3000) gọi API qua Backend (8000)
+# Cấu hình CORS Middleware: Cho phép Frontend (ví dụ localhost:3000) gọi API qua backend (cùng port bạn chạy uvicorn, thường 8001)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"], # Các domain được phép gọi API
@@ -84,10 +87,6 @@ async def anti_spam_middleware(request: Request, call_next):
 
     return await call_next(request)
 
-# Gắn các router con
-app.include_router(auth.router)
-app.include_router(projects.router)
-app.include_router(teams.router)
 
 @app.get("/")
 def read_root():

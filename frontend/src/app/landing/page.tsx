@@ -9,17 +9,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 export default function LandingPage() {
   const [activeCategory, setActiveCategory] = useState<"all" | "image" | "video">("all");
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
-  const [userEmail] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return localStorage.getItem("user_email") || sessionStorage.getItem("user_email") || "";
-  });
-  const [hasToken] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
-    return Boolean(token && token !== "undefined" && token !== "null");
-  });
+  const [userEmail, setUserEmail] = useState("");
+  const [hasToken, setHasToken] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const isAuthenticated = hasToken;
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      const email =
+        localStorage.getItem("user_email") || sessionStorage.getItem("user_email") || "";
+      const token =
+        localStorage.getItem("access_token") || sessionStorage.getItem("access_token") || "";
+      setUserEmail(email);
+      setHasToken(Boolean(token && token !== "undefined" && token !== "null"));
+    });
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -105,9 +109,6 @@ export default function LandingPage() {
 
         <div className="mb-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#111827] to-[#0b1220] p-8 shadow-2xl shadow-black/30">
-            <p className="mb-3 inline-flex rounded-full border border-cyan-300/30 bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-200">
-              Vận hành bởi thư viện prompt + ui-stitch-figma-flow
-            </p>
             <h2 className="max-w-2xl text-3xl font-bold leading-tight sm:text-4xl">
               Tạo mẫu hình ảnh/video bằng AI, rồi tiếp tục làm ngay trong workspace.
             </h2>

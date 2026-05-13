@@ -7,12 +7,15 @@ from typing import List
 import os
 import time
 import json
+import base64
+import io
 import re
 import socket
 from urllib import request as urlrequest
 from urllib.error import HTTPError, URLError
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
+from PIL import Image as PILImage
 
 from pydantic import BaseModel # Kept existing
 
@@ -21,9 +24,25 @@ from database import get_db
 from services.audio_pipeline import generate_audio_from_text, get_audio_upload_dir, to_mp3_if_possible
 from auth import get_current_user
 
+from image_pipeline.pipeline import canon_engine_enabled, run_canon_image_pipeline
+from retrieval.service import append_chunks_for_new_segment, ensure_canon_scope
+from services.canon_queries import project_has_canon_characters
+from story_engine.context_pack import build_story_context_pack
+
 # Tạo Router cho group API liên quan đến Dự án, có prefix là /api/projects
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
 FPT_TTS_MODEL = "fpt-ai-tts-v5"
+# Text-to-image qua Hugging Face Inference (router); khớp dropdown frontend.
+HF_IMAGE_MODELS = frozenset(
+    {
+        "black-forest-labs/FLUX.1-dev",
+        "stabilityai/stable-diffusion-xl-base-1.0",
+        "runwayml/stable-diffusion-v1-5",
+        "Lykon/DreamShaper",
+        "SG161222/Realistic_Vision_V6.0_B1_noVAE",
+        "prompthero/openjourney",
+    }
+)
 HF_TRANSLATION_URLS_BY_MODE = {
     "vi-to-en": [
         "https://router.huggingface.co/hf-inference/models/Helsinki-NLP/opus-mt-vi-en",
@@ -89,6 +108,52 @@ def _build_recent_context(db: Session, project_id: str | UUID) -> str:
     return "\n\n".join(blocks)
 
 
+def generate_image_content(
+    instruction: str,
+    model_name: str | None,
+    hf_api_key: str | None,
+) -> str:
+    """
+    Sinh ảnh qua Hugging Face Inference text-to-image.
+    Trả về chuỗi data URL PNG để frontend hiển thị trực tiếp.
+    """
+    try:
+        from dotenv import find_dotenv
+
+        load_dotenv(find_dotenv(), override=True)
+        env_key = os.getenv("hf_key_read")
+        api_key = (hf_api_key or "").strip() or (env_key or "").strip()
+        if not api_key:
+            return (
+                "Hệ thống chưa cấu hình Hugging Face API Key (hf_key_read). "
+                "Thêm key trong Personalize hoặc liên hệ Admin."
+            )
+
+        model_id = (model_name or "").strip()
+        if model_id not in HF_IMAGE_MODELS:
+            model_id = "runwayml/stable-diffusion-v1-5"
+
+        client = InferenceClient(token=api_key)
+        image = client.text_to_image(
+            instruction.strip(),
+            model=model_id,
+            guidance_scale=7.5,
+            num_inference_steps=28,
+        )
+
+        buf = io.BytesIO()
+        if isinstance(image, PILImage.Image):
+            image.save(buf, format="PNG")
+        else:
+            buf.write(bytes(image))
+
+        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        return f"data:image/png;base64,{b64}"
+    except Exception as e:
+        print(f"Lỗi text-to-image Hugging Face: {e}")
+        return f"Không tạo được ảnh qua Hugging Face Inference. Chi tiết: {str(e)}"
+
+
 def generate_story_content(
     title: str,
     instruction: str,
@@ -97,6 +162,7 @@ def generate_story_content(
     recent_context: str = "",
     model_name: str | None = None,
     hf_api_key: str | None = None,
+    canon_context_pack: str | None = None,
 ) -> str:
     generated_content = ""
     try:
@@ -112,23 +178,28 @@ def generate_story_content(
 
         client = InferenceClient(token=api_key)
         context_block = ""
-        if previous_content.strip():
-            context_block = (
-                "Ngữ cảnh nội dung trước đó (hãy giữ mạch văn và logic nhất quán):\n"
-                f"{previous_content[-5000:]}\n\n"
-            )
-        if recent_context.strip():
-            context_block += (
-                "Tóm tắt lịch sử các lượt trước (ưu tiên dùng để giữ continuity):\n"
-                f"{recent_context}\n\n"
-            )
-
-        language_label = "vietnamese" if language == "vietnamese" else "english"
-        if language_label == "english":
+        use_canon_pack = bool(canon_context_pack and canon_context_pack.strip())
+        if use_canon_pack:
+            context_block = canon_context_pack.strip() + "\n\n"
+        elif language == "english":
             context_block = (
                 "Context from previous content (keep continuity and consistency):\n"
                 f"{previous_content[-2500:]}\n\n"
             ) if previous_content.strip() else ""
+        else:
+            if previous_content.strip():
+                context_block = (
+                    "Ngữ cảnh nội dung trước đó (hãy giữ mạch văn và logic nhất quán):\n"
+                    f"{previous_content[-5000:]}\n\n"
+                )
+            if recent_context.strip():
+                context_block += (
+                    "Tóm tắt lịch sử các lượt trước (ưu tiên dùng để giữ continuity):\n"
+                    f"{recent_context}\n\n"
+                )
+
+        language_label = "vietnamese" if language == "vietnamese" else "english"
+        if language_label == "english":
             prompt = (
                 f"Write the next part of this story in {language_label}.\n"
                 f"Title: {title}\n"
@@ -159,6 +230,9 @@ def generate_story_content(
             )
 
         max_retries = 15
+        max_tokens_per_call = 4096
+        max_continuations = 2  # Tối đa 2 lần nối tiếp nếu bị cắt
+
         for attempt in range(max_retries):
             try:
                 messages = [
@@ -172,12 +246,47 @@ def generate_story_content(
                 response = client.chat_completion(
                     model=model_id,
                     messages=messages,
-                    max_tokens=1500,
+                    max_tokens=max_tokens_per_call,
                     temperature=0.7
                 )
 
                 if response and response.choices:
-                    generated_content = str(response.choices[0].message.content).strip()
+                    choice = response.choices[0]
+                    generated_content = str(choice.message.content).strip()
+
+                    # Auto-continue khi model bị cắt giữa chừng (finish_reason=="length")
+                    finish_reason = getattr(choice, "finish_reason", None)
+                    if finish_reason == "length" and generated_content:
+                        cont_messages = list(messages) + [
+                            {"role": "assistant", "content": generated_content},
+                            {"role": "user", "content": "Hãy viết tiếp phần còn lại, bắt đầu ngay từ chỗ bạn dừng. Không lặp lại nội dung đã viết."}
+                        ]
+                        for _cont in range(max_continuations):
+                            try:
+                                cont_resp = client.chat_completion(
+                                    model=model_id,
+                                    messages=cont_messages,
+                                    max_tokens=max_tokens_per_call,
+                                    temperature=0.7
+                                )
+                                if cont_resp and cont_resp.choices:
+                                    cont_choice = cont_resp.choices[0]
+                                    cont_text = str(cont_choice.message.content).strip()
+                                    if cont_text:
+                                        generated_content += "\n\n" + cont_text
+                                    cont_finish = getattr(cont_choice, "finish_reason", None)
+                                    if cont_finish != "length":
+                                        break
+                                    # Cập nhật messages cho lần continue tiếp
+                                    cont_messages = list(messages) + [
+                                        {"role": "assistant", "content": generated_content},
+                                        {"role": "user", "content": "Hãy viết tiếp phần còn lại, bắt đầu ngay từ chỗ bạn dừng. Không lặp lại nội dung đã viết."}
+                                    ]
+                                else:
+                                    break
+                            except Exception as cont_err:
+                                print(f"[WARN] Auto-continue failed: {cont_err}")
+                                break
                 else:
                     generated_content = "AI không thể sinh nội dung với cấu hình Prompt này, hoặc model đang quá tải trên Hugging Face."
                 break
@@ -510,32 +619,60 @@ def create_project(
     Bắt buộc có JWT Token.
     Optional: header X-HF-Api-Key — key HF tạm của user (không lưu server).
     """
-    # Check if model is audio model
+    # Check model kind: audio / image / text LLM
     audio_models = [FPT_TTS_MODEL]
     is_audio_model = data.model_name and data.model_name in audio_models
+    is_image_model = bool(data.model_name and data.model_name in HF_IMAGE_MODELS)
 
-    # 1. Sinh nội dung theo mode:
-    # - Audio mode: dùng trực tiếp text cần đọc từ prompt, không đi qua chat model.
-    # - Text mode: sinh nội dung bằng LLM như cũ.
+    # 1. Tạo project trước để canon_scope / lore FK có project_id ổn định
+    new_project = models.Project(
+        user_id=current_user.id,
+        title=data.title,
+        prompt=data.prompt,
+        content="",
+    )
+    db.add(new_project)
+    db.commit()
+    db.refresh(new_project)
+    pid = new_project.id
+
+    # 2. Sinh nội dung theo mode
     if is_audio_model:
         generated_content = _extract_tts_text(data.prompt)
+    elif is_image_model:
+        ensure_canon_scope(db, pid)
+        mid = (data.model_name or "").strip() or "runwayml/stable-diffusion-v1-5"
+        if canon_engine_enabled() and project_has_canon_characters(db, pid):
+            out, _meta = run_canon_image_pipeline(db, pid, data.prompt, mid, x_hf_api_key)
+            generated_content = (
+                out if out.startswith("data:image") else generate_image_content(data.prompt, data.model_name, x_hf_api_key)
+            )
+        else:
+            generated_content = generate_image_content(
+                instruction=data.prompt,
+                model_name=data.model_name,
+                hf_api_key=x_hf_api_key,
+            )
     else:
+        scope = ensure_canon_scope(db, pid)
+        pack = None
+        if canon_engine_enabled():
+            pack = build_story_context_pack(db, pid, data.prompt, x_hf_api_key, project_content="")
         generated_content = generate_story_content(
             title=data.title,
             instruction=data.prompt,
             language=data.language,
             model_name=data.model_name,
             hf_api_key=x_hf_api_key,
+            canon_context_pack=pack,
         )
+        if canon_engine_enabled():
+            try:
+                append_chunks_for_new_segment(db, scope.id, generated_content, x_hf_api_key)
+            except Exception as chunk_err:
+                print(f"[WARN] lore chunk append failed: {chunk_err}")
 
-    # 2. Tạo bản ghi dự án mới với nội dung AI vừa sinh
-    new_project = models.Project(
-        user_id=current_user.id, # Tự động lấy ID người dùng từ Token làm khoá ngoại (FK)
-        title=data.title,
-        prompt=data.prompt,
-        content=generated_content
-    )
-    db.add(new_project)
+    new_project.content = generated_content
     db.commit()
     db.refresh(new_project)
 
@@ -622,15 +759,42 @@ def continue_project(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập Project này.")
 
     recent_context = _build_recent_context(db, pid)
-    new_chunk = generate_story_content(
-        title=project.title,
-        instruction=data.prompt,
-        previous_content=project.content or "",
-        language=data.language,
-        recent_context=recent_context,
-        model_name=data.model_name,
-        hf_api_key=x_hf_api_key,
-    )
+    is_image_model = bool(data.model_name and data.model_name in HF_IMAGE_MODELS)
+
+    if is_image_model:
+        ensure_canon_scope(db, pid)
+        mid = (data.model_name or "").strip() or "runwayml/stable-diffusion-v1-5"
+        if canon_engine_enabled() and project_has_canon_characters(db, pid):
+            out, _meta = run_canon_image_pipeline(db, pid, data.prompt, mid, x_hf_api_key)
+            new_chunk = (
+                out if out.startswith("data:image") else generate_image_content(data.prompt, data.model_name, x_hf_api_key)
+            )
+        else:
+            new_chunk = generate_image_content(
+                instruction=data.prompt,
+                model_name=data.model_name,
+                hf_api_key=x_hf_api_key,
+            )
+    else:
+        scope = ensure_canon_scope(db, pid)
+        pack = None
+        if canon_engine_enabled():
+            pack = build_story_context_pack(db, pid, data.prompt, x_hf_api_key, project_content=project.content or "")
+        new_chunk = generate_story_content(
+            title=project.title,
+            instruction=data.prompt,
+            previous_content=project.content or "",
+            language=data.language,
+            recent_context="" if canon_engine_enabled() else recent_context,
+            model_name=data.model_name,
+            hf_api_key=x_hf_api_key,
+            canon_context_pack=pack if canon_engine_enabled() else None,
+        )
+        if canon_engine_enabled():
+            try:
+                append_chunks_for_new_segment(db, scope.id, new_chunk, x_hf_api_key)
+            except Exception as chunk_err:
+                print(f"[WARN] lore chunk append failed: {chunk_err}")
 
     project.prompt = data.prompt
     if project.content and project.content.strip():

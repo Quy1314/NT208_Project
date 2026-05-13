@@ -4,6 +4,8 @@ import AuthShell from "@/components/auth/AuthShell";
 import { API_BASE_URL } from "@/lib/api";
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -25,8 +27,8 @@ export default function ForgotPasswordPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Có lỗi xảy ra.");
       setMessage(data.message);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra.");
     } finally {
       setLoading(false);
     }
@@ -45,14 +47,14 @@ export default function ForgotPasswordPage() {
         {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
         <div>
           <label className="mb-1.5 block text-xs uppercase tracking-wider text-slate-400" htmlFor="email">Email</label>
-          <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+          <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+            className="h-11 border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder-slate-500"
             placeholder="you@gmail.com" />
         </div>
-        <button type="submit" disabled={loading}
-          className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60">
+        <Button type="submit" disabled={loading}
+          className="h-11 w-full bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">
           {loading ? "Sending..." : "Send reset email"}
-        </button>
+        </Button>
       </form>
       <p className="mt-6 text-center text-sm text-slate-400">
         Nhớ mật khẩu rồi? <Link href="/login" className="font-semibold text-blue-400 hover:text-blue-300">Quay lại đăng nhập</Link>
