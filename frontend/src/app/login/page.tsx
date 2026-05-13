@@ -69,10 +69,10 @@ export default function LoginPage() {
                 localStorage.removeItem("remembered_email"); // Xóa email nếu không tick
             }
 
-            // Chuyển hướng
-            router.push("/");
-        } catch (err: any) {
-            setError(err.message);
+            // Sau đăng nhập: vào workspace
+            router.push("/workspace");
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Login failed");
         } finally {
             setLoading(false);
         }
