@@ -2,6 +2,9 @@
 
 import React from "react";
 import { Moon, Sun } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 type AuthShellProps = {
   title: string;
@@ -56,33 +59,39 @@ export default function AuthShell({
             <blockquote className="text-3xl font-bold leading-tight">{quote}</blockquote>
             <div className="text-sm text-slate-300">
               <p className="font-semibold text-white">{author}</p>
-              <p>{role}</p>
+              <Badge variant="secondary" className="mt-2 bg-white/10 text-slate-200 ring-1 ring-white/20">
+                {role}
+              </Badge>
             </div>
           </div>
         </div>
       </aside>
       <main className="flex-1 flex items-center justify-center px-6 py-10 sm:px-12">
-        <section className={`relative w-full max-w-md rounded-2xl p-7 shadow-2xl backdrop-blur ${
-          isDark
-            ? "border border-slate-800 bg-slate-900/80"
-            : "border border-slate-200 bg-white"
-        }`}>
-          <button
+        <Card
+          className={`relative w-full max-w-md p-3 shadow-2xl backdrop-blur ${
+            isDark
+              ? "border-slate-800 bg-slate-900/80"
+              : "border-slate-200 bg-white"
+          }`}
+        >
+          <Button
             type="button"
             onClick={toggleTheme}
-            className={`absolute right-4 top-4 rounded-lg p-2 transition-colors ${
-              isDark ? "bg-slate-800 text-slate-100 hover:bg-slate-700" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+            variant="outline"
+            size="icon-sm"
+            className={`absolute right-4 top-4 ${
+              isDark ? "bg-slate-800 text-slate-100 hover:bg-slate-700 border-slate-700" : "bg-slate-100 text-slate-700 hover:bg-slate-200 border-slate-200"
             }`}
             aria-label="Toggle theme"
           >
             {isDark ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-          <header className="mb-8 text-center">
-            <h1 className={`text-3xl font-bold ${isDark ? "text-white" : "text-slate-900"}`}>{title}</h1>
-            <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>{subtitle}</p>
-          </header>
-          {children}
-        </section>
+          </Button>
+          <CardHeader className="pt-6 text-center">
+            <CardTitle className={`text-3xl font-bold ${isDark ? "text-white" : "text-slate-900"}`}>{title}</CardTitle>
+            <CardDescription className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>{subtitle}</CardDescription>
+          </CardHeader>
+          <CardContent>{children}</CardContent>
+        </Card>
       </main>
     </div>
   );

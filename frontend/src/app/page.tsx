@@ -9,23 +9,22 @@
     import { TranslationMode, translateProjectForExport } from "@/lib/translateForExport";
     import { getTemplatePromptById } from "@/lib/landingTemplates";
     import {
-      MessageSquare,
-      Settings,
+      ALL_HF_MODEL_IDS,
+      HF_IMAGE_MODEL_OPTIONS,
+      HF_MODEL_GROUPS,
+      isImageModelId,
+    } from "@/lib/hfModels";
+    import ProjectSidebar from "@/components/workspace/ProjectSidebar";
+    import ProjectStage from "@/components/workspace/ProjectStage";
+    import ComposerBar from "@/components/workspace/ComposerBar";
+    import {
       LogOut,
       User,
-      Plus,
-      MoreHorizontal,
-      Trash2,
-      Paperclip,
-      Mic,
-      ArrowUp,
-      LayoutDashboard,
       Sparkles,
       ChevronDown,
       X,
       Moon,
       Sun,
-      FileDown,
       KeyRound
     } from "lucide-react";
 
@@ -38,26 +37,6 @@
       if (hf) headers["X-HF-Api-Key"] = hf;
       return headers;
     }
-
-    /** Các model Hugging Face được cài đặt trong app — user chỉ chọn qua dropdown, không nhập tay. */
-    const HF_MODEL_OPTIONS: string[] = [
-      "Qwen/Qwen2.5-72B-Instruct",
-      "Qwen/Qwen2.5-7B-Instruct",
-      "meta-llama/Llama-3.1-70B-Instruct",
-      "meta-llama/Llama-3.2-3B-Instruct",
-      "mistralai/Mixtral-8x7B-Instruct-v0.1",
-      "mistralai/Mistral-7B-Instruct-v0.3",
-    ];
-
-    /** Model ảnh free phổ biến trên Hugging Face (tham khảo để dùng với endpoint text-to-image). */
-    const HF_IMAGE_MODEL_OPTIONS: string[] = [
-      "black-forest-labs/FLUX.1-dev",
-      "stabilityai/stable-diffusion-xl-base-1.0",
-      "runwayml/stable-diffusion-v1-5",
-      "Lykon/DreamShaper",
-      "SG161222/Realistic_Vision_V6.0_B1_noVAE",
-      "prompthero/openjourney",
-    ];
 
     interface Project {
       id: string;
@@ -88,6 +67,7 @@
       const [isGenerating, setIsGenerating] = useState(false); // Ngăn chặn Double-Submit (Race Conditions)
       const [isContinuing, setIsContinuing] = useState(false);
       const [modelName, setModelName] = useState("Qwen/Qwen2.5-72B-Instruct");
+      const isImageModel = isImageModelId(modelName);
       const [creativity, setCreativity] = useState("Balanced");
       const [language, setLanguage] = useState<"vietnamese" | "english">("vietnamese");
       const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -184,8 +164,8 @@
       }, []);
 
       useEffect(() => {
-        if (!HF_MODEL_OPTIONS.includes(modelName)) {
-          setModelName(HF_MODEL_OPTIONS[0]);
+        if (!ALL_HF_MODEL_IDS.includes(modelName)) {
+          setModelName(ALL_HF_MODEL_IDS[0]);
         }
       }, [modelName]);
 
@@ -427,7 +407,16 @@
           } else if (res.status === 401) {
             handleLogout();
           } else {
-            alert("Có lỗi xảy ra khi tạo dự án.");
+            let msg = "Có lỗi xảy ra khi tạo dự án.";
+            try {
+              const errBody = await res.json();
+              if (typeof errBody.detail === "string") msg = errBody.detail;
+              else if (Array.isArray(errBody.detail))
+                msg = errBody.detail.map((x: unknown) => JSON.stringify(x)).join("; ");
+            } catch {
+              /* ignore */
+            }
+            alert(msg);
           }
         } catch (e) {
           console.error(e);
@@ -460,7 +449,16 @@
           } else if (res.status === 401) {
             handleLogout();
           } else {
-            alert("Có lỗi xảy ra khi viết tiếp dự án.");
+            let msg = "Có lỗi xảy ra khi viết tiếp dự án.";
+            try {
+              const errBody = await res.json();
+              if (typeof errBody.detail === "string") msg = errBody.detail;
+              else if (Array.isArray(errBody.detail))
+                msg = errBody.detail.map((x: unknown) => JSON.stringify(x)).join("; ");
+            } catch {
+              /* ignore */
+            }
+            alert(msg);
           }
         } catch (e) {
           console.error(e);
@@ -535,7 +533,7 @@
           setPasswordMessage(data.message || "Đổi mật khẩu thành công.");
           setCurrentPassword("");
           setNewPassword("");
-        } catch (e) {
+        } catch {
           setPasswordError("Lỗi kết nối máy chủ.");
         } finally {
           setChangingPassword(false);
@@ -548,120 +546,34 @@
             isDark ? "bg-slate-900 border border-slate-800" : "bg-white border border-slate-200"
           }`}>
 
-            {/* 1. LEFT SIDEBAR (Projects) */}
-            <div className={`w-64 border-r flex flex-col pt-6 pb-4 px-4 hidden md:flex ${
-              isDark ? "bg-slate-950 border-slate-800" : "bg-slate-50 border-slate-100"
-            }`}>
-              {/* Logo Area */}
-              <Link href="/landing" className="flex items-center gap-3 px-2 mb-8 rounded-lg hover:bg-slate-800/40 transition-colors">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white shadow-sm">
-                  <Sparkles size={16} />
-                </div>
-                <span className={`font-bold text-lg tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>AI Assistant</span>
-              </Link>
-
-              {/* New Project Button */}
-              <button
-                onClick={() => { setIsCreating(true); setSelectedProject(null); setTitle(""); setPrompt(""); setContinuePrompt(""); }}
-                className={`flex items-center gap-2 transition-colors w-full p-2.5 rounded-xl text-sm font-semibold shadow-sm mb-6 ${
-                  isDark
-                    ? "bg-slate-900 border border-slate-700 text-slate-200 hover:border-blue-400 hover:text-blue-300"
-                    : "bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600"
-                }`}>
-                <Plus size={18} />
-                New Project
-              </button>
-
-              {/* Project List */}
-              <div className="flex-1 overflow-y-auto">
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-2">
-                  Recent Projects
-                </div>
-                <div className="space-y-1">
-                  {projects.map((proj) => (
-                    <div key={proj.id} className="group relative flex items-center w-full">
-                      <button
-                        onClick={() => handleSelectProject(proj.id)}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${selectedProject?.id === proj.id ? 'bg-blue-50 text-blue-700' : 'hover:bg-slate-100 text-slate-700'}`}>
-                        <MessageSquare size={16} className={selectedProject?.id === proj.id ? 'text-blue-500' : 'text-slate-400 group-hover:text-blue-500'} />
-                        <span className="truncate flex-1 pr-6">{proj.title}</span>
-                      </button>
-                      <button
-                        onClick={(e) => handleDeleteProject(proj.id, e)}
-                        title="Xóa project"
-                        className={`absolute right-2 p-1 transition-opacity ${
-                          selectedProject?.id === proj.id
-                            ? "opacity-100 text-red-500"
-                            : "opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
-                        }`}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className={`mt-3 pt-3 ${isDark ? "border-t border-slate-800" : "border-t border-slate-200"}`}>
-                <div className={`text-xs font-bold uppercase tracking-wider mb-2 px-2 ${
-                  isDark ? "text-slate-300" : "text-slate-400"
-                }`}>
-                  Team Workspace
-                </div>
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      value={newTeamName}
-                      onChange={(e) => setNewTeamName(e.target.value)}
-                      placeholder="Team name"
-                      className={`flex-1 rounded-lg border px-2 py-1.5 text-xs focus:outline-none ${
-                        isDark
-                          ? "border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500 focus:border-blue-400"
-                          : "border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:border-blue-500"
-                      }`}
-                    />
-                    <button
-                      onClick={handleCreateTeam}
-                      disabled={isCreatingTeam}
-                      className="rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-                    >
-                      {isCreatingTeam ? "..." : "Create"}
-                    </button>
-                  </div>
-                  <select
-                    value={selectedTeamId}
-                    onChange={(e) => setSelectedTeamId(e.target.value)}
-                    className={`w-full rounded-lg border px-2 py-1.5 text-xs focus:outline-none ${
-                      isDark
-                        ? "border-slate-700 bg-slate-900 text-slate-100 focus:border-blue-400"
-                        : "border-slate-200 bg-white text-slate-900 focus:border-blue-500"
-                    }`}
-                  >
-                    <option value="">Chọn team</option>
-                    {teams.map((team) => (
-                      <option key={team.id} value={team.id}>{team.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Bottom Sidebar Settings */}
-              <div className="mt-auto pt-4 border-t border-slate-200/60">
-                <button
-                  onClick={() => {
-                    if (!selectedProject) {
-                      alert("Vui lòng chọn project trước.");
-                      return;
-                    }
-                    setIsProjectSettingsOpen(true);
-                  }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-100 rounded-lg text-sm text-slate-700 font-medium transition-colors"
-                >
-                  <Settings size={18} className="text-slate-400" />
-                  Settings
-                </button>
-              </div>
-            </div>
+            <ProjectSidebar
+              isDark={isDark}
+              projects={projects}
+              selectedProject={selectedProject}
+              newTeamName={newTeamName}
+              setNewTeamName={setNewTeamName}
+              isCreatingTeam={isCreatingTeam}
+              selectedTeamId={selectedTeamId}
+              setSelectedTeamId={setSelectedTeamId}
+              teams={teams}
+              onCreateTeam={handleCreateTeam}
+              onSelectProject={handleSelectProject}
+              onDeleteProject={handleDeleteProject}
+              onCreateProjectStart={() => {
+                setIsCreating(true);
+                setSelectedProject(null);
+                setTitle("");
+                setPrompt("");
+                setContinuePrompt("");
+              }}
+              onOpenSettings={() => {
+                if (!selectedProject) {
+                  alert("Vui lòng chọn project trước.");
+                  return;
+                }
+                setIsProjectSettingsOpen(true);
+              }}
+            />
 
             {/* 2. MAIN CONTENT AREA */}
             <div className={`flex-1 flex flex-col relative ${isDark ? "bg-slate-900" : "bg-white"}`}>
@@ -768,184 +680,39 @@
                 ref={mainScrollRef}
                 className={`flex-1 overflow-y-auto px-4 ${isCreating || selectedProject ? "pb-40" : "pb-8"}`}
               >
-                {selectedProject ? (
-                  <div className="max-w-3xl mx-auto pt-10 px-4">
-                    <div className="mb-6 flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
-                      <h2 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-800"}`}>{selectedProject.title}</h2>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {selectedProject.content?.trim() &&
-                          selectedProject.content !== "Waiting for LLM generation..." && (
-                            <button
-                              type="button"
-                              onClick={() => setIsExportPanelOpen(true)}
-                              disabled={exportingFormat !== null}
-                              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${
-                                isDark
-                                  ? "border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                              }`}
-                            >
-                              <FileDown size={14} />
-                              {exportingFormat ? "Đang export..." : "Export"}
-                            </button>
-                          )}
-                        <button
-                          onClick={() => handleDeleteProject(selectedProject.id)}
-                          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                            isDark
-                              ? "border-red-900/60 bg-red-950/40 text-red-300 hover:bg-red-950/70"
-                              : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
-                          }`}
-                        >
-                          Xóa project
-                        </button>
-                      </div>
-                    </div>
-                    <div className={`p-4 rounded-xl mb-6 shadow-sm border self-end ml-auto max-w-[85%] ${
-                      isDark ? "bg-slate-800/80 border-slate-700 text-slate-100" : "bg-blue-50 text-blue-900 border-blue-100"
-                    }`}>
-                      <p className={`font-semibold text-xs mb-1 uppercase tracking-wider ${isDark ? "text-blue-300" : "text-blue-700"}`}>Your Prompt</p>
-                      <p className="text-sm font-medium whitespace-pre-wrap">{selectedProject.prompt}</p>
-                    </div>
-
-                    <div className={`p-6 rounded-2xl shadow-sm border mb-8 w-full max-w-[95%] ${
-                      isDark ? "bg-slate-800/60 border-slate-700 text-slate-200" : "bg-white border-slate-100 text-slate-700"
-                    }`}>
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center text-white">
-                          <Sparkles size={12} />
-                        </div>
-                        <span className="font-bold text-sm">AI Generated Content</span>
-                      </div>
-                      <div className={`prose prose-sm max-w-none ${isDark ? "prose-invert" : "prose-slate"}`}>
-                        {selectedProject.content === "Waiting for LLM generation..." ? (
-                          <div className="flex items-center gap-2 text-slate-400 animate-pulse">
-                            <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
-                            <div className="w-2 h-2 bg-slate-400 rounded-full animation-delay-200"></div>
-                            <div className="w-2 h-2 bg-slate-400 rounded-full animation-delay-400"></div>
-                            <span className="ml-2 text-sm">AI is writing your story...</span>
-                          </div>
-                        ) : (
-                          <p className="whitespace-pre-wrap leading-relaxed">{selectedProject.content}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : isCreating ? (
-                  <div className="max-w-3xl mx-auto pt-10 px-4 h-full flex flex-col justify-center">
-                    <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">Create New Project</h2>
-                    <p className="text-slate-500 font-medium mb-10">Instruct the AI to generate a creative story below.</p>
-                    {/* Ẩn cục bộ form nhập Title gốc đi, vì giờ đã Auto-generate từ Prompt ở dưới */}
-                  </div>
-                ) : (
-                  <div className="max-w-4xl mx-auto h-full flex flex-col justify-center items-center pt-10 lg:pt-20">
-                    {/* Avatar & Greeting */}
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-blue-500 to-blue-300 shadow-md mb-6"></div>
-                    <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-3 tracking-tight">
-                      Hi, there 👋
-                    </h2>
-                    <p className="text-slate-500 font-medium mb-12 text-center">
-                      Select a project from the sidebar or create a new one to begin.
-                    </p>
-                    <button
-                      onClick={() => setIsCreating(true)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-sm transition-colors flex items-center gap-2">
-                      <Plus size={18} /> Start Creative Project
-                    </button>
-                  </div>
-                )}
+                <ProjectStage
+                  isDark={isDark}
+                  selectedProject={selectedProject}
+                  isCreating={isCreating}
+                  exportingFormat={exportingFormat}
+                  onOpenExport={() => setIsExportPanelOpen(true)}
+                  onDeleteSelectedProject={() => selectedProject && handleDeleteProject(selectedProject.id)}
+                  onStartCreating={() => setIsCreating(true)}
+                />
               </main>
 
-              {(isCreating || selectedProject) && (
-                <div
-                  className={`absolute bottom-6 left-1/2 z-30 w-[95%] max-w-4xl -translate-x-1/2 sm:w-[85%] transition-all duration-300 ease-out ${
-                    isMainAtBottom
-                      ? "pointer-events-auto translate-y-0 opacity-100"
-                      : "pointer-events-none translate-y-8 opacity-0"
-                  }`}
-                >
-                  <div className="bg-[#1b1c20] border border-[#2a2c31] shadow-[0_10px_40px_rgba(0,0,0,0.5)] rounded-3xl p-3 flex flex-col gap-2 transition-all">
-
-                    {/* Input Area */}
-                    <textarea
-                      value={selectedProject ? continuePrompt : prompt}
-                      onChange={(e) => selectedProject ? setContinuePrompt(e.target.value) : setPrompt(e.target.value)}
-                      placeholder={selectedProject ? "Nhập yêu cầu để AI viết tiếp dự án này..." : "Describe your story, characters, and plot here..."}
-                      className="w-full max-h-32 min-h-[60px] p-3 text-[#f3f4f6] focus:outline-none resize-none placeholder-[#6b7280] bg-transparent font-medium"
-                    />
-
-                    {/* Tools & Generate Button Bar */}
-                    <div className="flex items-center justify-between pt-1 px-2 border-t border-[#2a2c31]/50 mt-1">
-
-                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                        <select
-                          value={HF_MODEL_OPTIONS.includes(modelName) ? modelName : HF_MODEL_OPTIONS[0]}
-                          onChange={(e) => setModelName(e.target.value)}
-                          title="Model Hugging Face (danh sách được cấu hình trong app)"
-                          className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg max-w-[min(100%,18rem)] font-mono truncate"
-                        >
-                          {HF_MODEL_OPTIONS.map((id) => (
-                            <option key={id} value={id}>
-                              {id}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={creativity}
-                          onChange={(e) => setCreativity(e.target.value)}
-                          className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg"
-                        >
-                          <option>Focused</option>
-                          <option>Balanced</option>
-                          <option>Creative</option>
-                        </select>
-                        <select
-                          value={language}
-                          onChange={(e) => setLanguage(e.target.value as "vietnamese" | "english")}
-                          className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg"
-                        >
-                          <option value="vietnamese">vietnamese</option>
-                          <option value="english">english</option>
-                        </select>
-                      </div>
-
-                      {/* Right: Original Tools & Generate */}
-                      <div className="flex items-center gap-2">
-                        <button className="flex items-center gap-1.5 text-xs font-semibold text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31] px-2 py-1.5 rounded-lg transition-colors">
-                          <Paperclip size={14} /> Attach
-                        </button>
-                        <button className="flex items-center gap-1.5 text-xs font-semibold text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31] px-2 py-1.5 rounded-lg transition-colors">
-                          <Mic size={14} /> Voice
-                        </button>
-
-                        <button
-                          onClick={selectedProject ? handleContinueProject : handleCreateProject}
-                          disabled={selectedProject ? isContinuing : isGenerating}
-                          className={`flex items-center gap-1.5 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all shadow-md ml-2 ${(selectedProject ? isContinuing : isGenerating) ? 'bg-indigo-500/50 cursor-not-allowed' : 'bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 hover:shadow-lg'}`}>
-                          {(selectedProject ? isContinuing : isGenerating) ? (
-                            <>
-                              <div className="w-4 h-4 rounded-full border-2 border-white/80 border-t-transparent animate-spin"></div>
-                              {selectedProject ? "Đang viết tiếp..." : "Generating..."}
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles size={16} /> {selectedProject ? "Viết tiếp" : "Generate"}
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  {personalHfKeyActive && (
-                    <p className="text-center mt-2 text-[10px] text-amber-400/90 font-medium font-sans">
-                      Đang dùng Hugging Face token cá nhân (Personalize).
-                    </p>
-                  )}
-                  <div className="text-center mt-3 text-[10px] text-slate-400 font-medium font-sans">
-                    AI may display inaccurate info, so please double check the response.
-                  </div>
-                </div>
-              )}
+              <ComposerBar
+                isVisible={Boolean(isCreating || selectedProject)}
+                isMainAtBottom={isMainAtBottom}
+                selectedProject={selectedProject}
+                prompt={prompt}
+                continuePrompt={continuePrompt}
+                setPrompt={setPrompt}
+                setContinuePrompt={setContinuePrompt}
+                modelGroups={HF_MODEL_GROUPS}
+                allModelIds={ALL_HF_MODEL_IDS}
+                modelName={modelName}
+                setModelName={setModelName}
+                isImageModel={isImageModel}
+                creativity={creativity}
+                setCreativity={setCreativity}
+                language={language}
+                setLanguage={setLanguage}
+                isGenerating={isGenerating}
+                isContinuing={isContinuing}
+                onSubmit={selectedProject ? handleContinueProject : handleCreateProject}
+                personalHfKeyActive={personalHfKeyActive}
+              />
 
               {isProfileOpen && (
                 <>

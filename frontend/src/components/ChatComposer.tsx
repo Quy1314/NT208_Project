@@ -232,7 +232,7 @@ export default function ChatComposer() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleSendMessage(e as any);
+                  e.currentTarget.form?.requestSubmit();
                 }
               }}
               placeholder="Nhập tin nhắn..."
