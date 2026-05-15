@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from database import get_db
 import models
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import formataddr
 import smtplib
@@ -16,6 +16,7 @@ import threading
 from zoneinfo import ZoneInfo
 from jose import jwt, JWTError
 from dotenv import load_dotenv
+from typing import Any, cast
 
 # Tải các biến môi trường từ file .env
 load_dotenv()
@@ -142,7 +143,7 @@ def verify_password(plain_password, hashed_password):
 # Hàm sinh JWT Token có gắn kèm thông tin cơ bản và thời gian hết hạn
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     # Ký kết chuỗi Token bằng thuật toán HS256 và Secret Key lưu trong biến môi trường
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -198,7 +199,8 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), is_remember: bo
         )
 
     # Lưu trạng thái "Remember Me" vào CSDL cho User này
-    db_user.is_remember = is_remember
+    db_user_obj = cast(Any, db_user)
+    db_user_obj.is_remember = is_remember
     db.commit()
 
     # Sinh (Generate) JWT Token với mã định danh (subject 'sub') là ID của người dùng
@@ -239,7 +241,7 @@ def forgot_password(data: models.ForgotPasswordRequest, db: Session = Depends(ge
     db.commit()
 
     try:
-        send_reset_email(db_user.email, token)
+        send_reset_email(str(cast(Any, db_user).email), token)
     except Exception as e:
         print(f"Lỗi gửi reset mail: {e}")
 
@@ -267,8 +269,10 @@ def reset_password(data: models.ResetPasswordRequest, db: Session = Depends(get_
     if not db_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy người dùng.")
 
-    db_user.password_hash = get_password_hash(data.new_password)
-    reset_token.used_at = datetime.now(ZoneInfo("UTC"))
+    db_user_obj = cast(Any, db_user)
+    reset_token_obj = cast(Any, reset_token)
+    db_user_obj.password_hash = get_password_hash(data.new_password)
+    reset_token_obj.used_at = datetime.now(ZoneInfo("UTC"))
     db.commit()
 
     return {"message": "Đổi mật khẩu thành công. Vui lòng đăng nhập lại."}
@@ -296,8 +300,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     try:
         # Giải mã Token
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
+        user_id = payload.get("sub")
+        if not isinstance(user_id, str):
             raise credentials_exception
     except JWTError:
         raise credentials_exception
@@ -322,7 +326,7 @@ def change_password(
     if data.current_password == data.new_password:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mật khẩu mới phải khác mật khẩu hiện tại.")
 
-    current_user.password_hash = get_password_hash(data.new_password)
+    cast(Any, current_user).password_hash = get_password_hash(data.new_password)
     db.commit()
     return {"message": "Đổi mật khẩu thành công."}
 

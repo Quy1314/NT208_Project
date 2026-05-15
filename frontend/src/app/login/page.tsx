@@ -82,11 +82,11 @@ export default function LoginPage() {
 
     return (
         <AuthShell
-            title="Welcome back"
+            title="Chào mừng trở lại"
             subtitle="Đăng nhập để tiếp tục làm việc với AI Workspace"
-            quote="Build, iterate, and ship your stories with AI."
-            author="AI Generator Team"
-            role="Creative Platform"
+            quote="Xây dựng, tinh chỉnh và xuất bản câu chuyện của bạn cùng AI."
+            author="Đội ngũ AI Generator"
+            role="Nền tảng sáng tạo"
         >
             <form onSubmit={handleLogin} className="space-y-5" autoComplete="off">
                 {error && <div className={`rounded-lg border p-3 text-sm ${isDark ? "border-red-500/40 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
@@ -102,8 +102,8 @@ export default function LoginPage() {
                 </div>
                 <div>
                     <div className="mb-1.5 flex items-center justify-between">
-                        <label className={`text-xs uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-600"}`} htmlFor="password">Password</label>
-                        <Link href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300">Forgot password?</Link>
+                        <label className={`text-xs uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-600"}`} htmlFor="password">Mật khẩu</label>
+                        <Link href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300">Quên mật khẩu?</Link>
                     </div>
                     <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
                         className={`h-11 px-4 py-3 text-sm ${
@@ -115,11 +115,11 @@ export default function LoginPage() {
                 </div>
                 <label className={`flex items-center gap-2 text-sm ${isDark ? "text-slate-300" : "text-slate-700"}`}>
                     <input id="remember-me" type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className={`h-4 w-4 rounded ${isDark ? "border-slate-600 bg-slate-900" : "border-slate-300 bg-white"}`} />
-                    Remember me
+                    Ghi nhớ đăng nhập
                 </label>
                 <Button type="submit" disabled={loading}
                     className="h-11 w-full bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">
-                    {loading ? "Logging in..." : "Log in"}
+                    {loading ? "Đang đăng nhập..." : "Đăng nhập"}
                 </Button>
             </form>
             <p className={`mt-6 text-center text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>

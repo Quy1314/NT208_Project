@@ -27,7 +27,7 @@ function renderGeneratedContent(content: string, isDark: boolean) {
         <div className="w-2 h-2 bg-slate-400 rounded-full"></div>
         <div className="w-2 h-2 bg-slate-400 rounded-full animation-delay-200"></div>
         <div className="w-2 h-2 bg-slate-400 rounded-full animation-delay-400"></div>
-        <span className="ml-2 text-sm">AI is writing your story...</span>
+        <span className="ml-2 text-sm">AI đang viết nội dung cho bạn...</span>
       </div>
     );
   }
@@ -85,7 +85,7 @@ export default function ProjectStage({
                 className={isDark ? "border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}
               >
                 <FileDown size={14} />
-                {exportingFormat ? "Đang export..." : "Export"}
+                {exportingFormat ? "Đang xuất..." : "Xuất file"}
               </Button>
             )}
             <Button
@@ -94,7 +94,7 @@ export default function ProjectStage({
               size="sm"
               className={isDark ? "border-red-900/60 bg-red-950/40 text-red-300 hover:bg-red-950/70" : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"}
             >
-              Xóa project
+              Xóa dự án
             </Button>
           </div>
         </div>
@@ -102,7 +102,7 @@ export default function ProjectStage({
         <div className={`p-4 rounded-xl mb-6 shadow-sm border self-end ml-auto max-w-[85%] ${
           isDark ? "bg-slate-800/80 border-slate-700 text-slate-100" : "bg-blue-50 text-blue-900 border-blue-100"
         }`}>
-          <p className={`font-semibold text-xs mb-1 uppercase tracking-wider ${isDark ? "text-blue-300" : "text-blue-700"}`}>Your Prompt</p>
+          <p className={`font-semibold text-xs mb-1 uppercase tracking-wider ${isDark ? "text-blue-300" : "text-blue-700"}`}>Yêu cầu của bạn</p>
           <p className="text-sm font-medium whitespace-pre-wrap">{selectedProject.prompt}</p>
         </div>
 
@@ -113,7 +113,7 @@ export default function ProjectStage({
             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center text-white">
               <Sparkles size={12} />
             </div>
-            <span className="font-bold text-sm">AI Generated Content</span>
+            <span className="font-bold text-sm">Nội dung AI đã tạo</span>
           </div>
           <div className={`prose prose-sm max-w-none ${isDark ? "prose-invert" : "prose-slate"}`}>
             {renderGeneratedContent(selectedProject.content, isDark)}
@@ -126,8 +126,8 @@ export default function ProjectStage({
   if (isCreating) {
     return (
       <div className="max-w-3xl mx-auto pt-10 px-4 h-full flex flex-col justify-center">
-        <h2 className={`text-3xl md:text-4xl font-extrabold mb-2 tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>Create New Project</h2>
-        <p className={`${isDark ? "text-slate-400" : "text-slate-500"} font-medium mb-10`}>Instruct the AI to generate a creative story below.</p>
+        <h2 className={`text-3xl md:text-4xl font-extrabold mb-2 tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>Tạo dự án mới</h2>
+        <p className={`${isDark ? "text-slate-400" : "text-slate-500"} font-medium mb-10`}>Hãy hướng dẫn AI tạo một câu chuyện sáng tạo bên dưới.</p>
       </div>
     );
   }
@@ -136,13 +136,13 @@ export default function ProjectStage({
     <div className="max-w-4xl mx-auto h-full flex flex-col justify-center items-center pt-10 lg:pt-20">
       <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-blue-500 to-blue-300 shadow-md mb-6"></div>
       <h2 className={`text-3xl md:text-4xl font-extrabold mb-3 tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-        Hi, there
+        Xin chào
       </h2>
       <p className={`${isDark ? "text-slate-400" : "text-slate-500"} font-medium mb-12 text-center`}>
-        Select a project from the sidebar or create a new one to begin.
+        Chọn một dự án từ thanh bên hoặc tạo dự án mới để bắt đầu.
       </p>
       <Button onClick={onStartCreating} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-sm transition-colors flex items-center gap-2">
-        <Plus size={18} /> Start Creative Project
+        <Plus size={18} /> Bắt đầu dự án sáng tạo
       </Button>
     </div>
   );

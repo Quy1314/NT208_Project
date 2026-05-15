@@ -36,17 +36,23 @@ Bổ sung bảng canon, `lore_chunk` (embedding dạng `double precision[]` — 
 
 ### 3.1 Cài đặt
 
-Từ thư mục gốc repository:
+Từ **thư mục gốc repository** (`Project_AI_Agent`), cài dependencies Python bằng interpreter đang được IDE/shell chọn:
 
-```bash
-cd backend
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-pip install -r ../requirements.txt
+```powershell
+py -m pip install --upgrade pip
+py -m pip install -r requirements.txt
+```
+
+Nếu máy không có Python Launcher (`py`), dùng `python` tương đương:
+
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
 Dependencies được khai báo trong `requirements.txt` (thư mục gốc), không dùng `lib_lists.md`.
+
+`pyrefly.toml` chỉ cấu hình `search-path = ["backend"]`; không pin interpreter theo đường dẫn local. Nếu IDE/Pyrefly vẫn báo thiếu module sau khi cài dependencies, chọn đúng Python interpreter trong IDE rồi restart language server hoặc reload VS Code/Antigravity.
 
 ### 3.2 Biến môi trường (`backend/.env`)
 
@@ -70,16 +76,26 @@ Tạo file `backend/.env` (không commit; đã nằm trong `.gitignore`). Các b
 
 Trên Windows cổng **8000** đôi khi bị chiếm (`WinError 10013`); repo dùng ví dụ cổng **8001** cho backend và frontend cho khớp. Đổi port khác thì cập nhật `NEXT_PUBLIC_API_URL` bên frontend tương ứng.
 
-```bash
-cd backend
-python -m uvicorn main:app --host 127.0.0.1 --port 8001 --reload
+Từ thư mục gốc repository:
+
+```powershell
+py -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 --reload
 ```
+
+Hoặc nếu đang đứng trong thư mục `backend`:
+
+```powershell
+py -m uvicorn main:app --host 127.0.0.1 --port 8001 --reload
+```
+
+Nếu máy không có Python Launcher (`py`), thay `py` bằng `python`.
 
 Hoặc cổng khác (ví dụ 8010):
 
-```bash
-python -m uvicorn main:app --host 127.0.0.1 --port 8010 --reload
+```powershell
+py -m uvicorn main:app --host 127.0.0.1 --port 8010 --reload
 ```
+
 
 Kiểm tra:
 

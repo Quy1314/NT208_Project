@@ -3,6 +3,5 @@
   "typescript.tsdk": "frontend/node_modules/typescript/lib",
   "typescript.preferences.importModuleSpecifier": "non-relative",
   "typescript.updateImportsOnFileMove.enabled": "always",
-  "python.defaultInterpreterPath": "C:\\Users\\Hoang Quy\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
   "pyrefly.configPath": "pyrefly.toml"
 }

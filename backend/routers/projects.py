@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
-from typing import List
+from typing import Any, List, cast
 import os
 import time
 import json
@@ -81,7 +81,7 @@ def _project_uuid(project_id: str | UUID) -> UUID:
     if isinstance(project_id, UUID):
         return project_id
     try:
-        return UUID(str(project_id))
+        return UUID(project_id)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy Project.")
 
@@ -178,8 +178,7 @@ def generate_story_content(
 
         client = InferenceClient(token=api_key)
         context_block = ""
-        use_canon_pack = bool(canon_context_pack and canon_context_pack.strip())
-        if use_canon_pack:
+        if canon_context_pack is not None and canon_context_pack.strip():
             context_block = canon_context_pack.strip() + "\n\n"
         elif language == "english":
             context_block = (
@@ -598,10 +597,10 @@ def get_all_projects(db: Session = Depends(get_db), current_user: models.User = 
     # Ép kiểu UUID của pydantic trả về (do JSON không hỗ trợ uuid gốc)
     return [
         models.ProjectResponse(
-            id=str(p.id),
-            title=p.title,
-            prompt=p.prompt,
-            content=p.content
+            id=str(cast(Any, p).id),
+            title=str(cast(Any, p).title),
+            prompt=str(cast(Any, p).prompt),
+            content=str(cast(Any, p).content)
         ) for p in projects
     ]
 
@@ -634,7 +633,7 @@ def create_project(
     db.add(new_project)
     db.commit()
     db.refresh(new_project)
-    pid = new_project.id
+    pid = cast(UUID, cast(Any, new_project).id)
 
     # 2. Sinh nội dung theo mode
     if is_audio_model:
@@ -668,17 +667,17 @@ def create_project(
         )
         if canon_engine_enabled():
             try:
-                append_chunks_for_new_segment(db, scope.id, generated_content, x_hf_api_key)
+                append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), generated_content, x_hf_api_key)
             except Exception as chunk_err:
                 print(f"[WARN] lore chunk append failed: {chunk_err}")
 
-    new_project.content = generated_content
+    cast(Any, new_project).content = generated_content
     db.commit()
     db.refresh(new_project)
 
     db.add(
         models.ProjectContextEntry(
-            project_id=new_project.id,
+            project_id=pid,
             prompt=data.prompt,
             language=data.language,
             generated_content=generated_content,
@@ -712,11 +711,12 @@ def create_project(
         except Exception as audio_err:
             print(f"[WARN] TTS auto-generation failed for project {new_project.id}: {audio_err}")
 
+    new_project_obj = cast(Any, new_project)
     return models.ProjectResponse(
-        id=str(new_project.id),
-        title=new_project.title,
-        prompt=new_project.prompt,
-        content=new_project.content
+        id=str(new_project_obj.id),
+        title=str(new_project_obj.title),
+        prompt=str(new_project_obj.prompt),
+        content=str(new_project_obj.content)
     )
 
 
@@ -761,6 +761,10 @@ def continue_project(
     recent_context = _build_recent_context(db, pid)
     is_image_model = bool(data.model_name and data.model_name in HF_IMAGE_MODELS)
 
+    project_obj = cast(Any, project)
+    project_content = str(project_obj.content or "")
+    project_title = str(project_obj.title)
+
     if is_image_model:
         ensure_canon_scope(db, pid)
         mid = (data.model_name or "").strip() or "runwayml/stable-diffusion-v1-5"
@@ -779,11 +783,11 @@ def continue_project(
         scope = ensure_canon_scope(db, pid)
         pack = None
         if canon_engine_enabled():
-            pack = build_story_context_pack(db, pid, data.prompt, x_hf_api_key, project_content=project.content or "")
+            pack = build_story_context_pack(db, pid, data.prompt, x_hf_api_key, project_content=project_content)
         new_chunk = generate_story_content(
-            title=project.title,
+            title=project_title,
             instruction=data.prompt,
-            previous_content=project.content or "",
+            previous_content=project_content,
             language=data.language,
             recent_context="" if canon_engine_enabled() else recent_context,
             model_name=data.model_name,
@@ -792,22 +796,23 @@ def continue_project(
         )
         if canon_engine_enabled():
             try:
-                append_chunks_for_new_segment(db, scope.id, new_chunk, x_hf_api_key)
+                append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), new_chunk, x_hf_api_key)
             except Exception as chunk_err:
                 print(f"[WARN] lore chunk append failed: {chunk_err}")
 
-    project.prompt = data.prompt
-    if project.content and project.content.strip():
-        project.content = f"{project.content.rstrip()}\n\n---\n\n{new_chunk}"
+    project_obj = cast(Any, project)
+    project_obj.prompt = data.prompt
+    if project_content and project_content.strip():
+        project_obj.content = f"{project_content.rstrip()}\n\n---\n\n{new_chunk}"
     else:
-        project.content = new_chunk
+        project_obj.content = new_chunk
 
     db.commit()
     db.refresh(project)
 
     db.add(
         models.ProjectContextEntry(
-            project_id=project.id,
+            project_id=cast(UUID, project_obj.id),
             prompt=data.prompt,
             language=data.language,
             generated_content=new_chunk,
@@ -815,11 +820,12 @@ def continue_project(
     )
     db.commit()
 
+    project_obj = cast(Any, project)
     return models.ProjectResponse(
-        id=str(project.id),
-        title=project.title,
-        prompt=project.prompt,
-        content=project.content,
+        id=str(project_obj.id),
+        title=str(project_obj.title),
+        prompt=str(project_obj.prompt),
+        content=str(project_obj.content),
     )
 
 
@@ -840,11 +846,12 @@ def get_project_by_id(project_id: str, db: Session = Depends(get_db), current_us
     if project.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập Project này.")
 
+    project_obj = cast(Any, project)
     return models.ProjectResponse(
-        id=str(project.id),
-        title=project.title,
-        prompt=project.prompt,
-        content=project.content
+        id=str(project_obj.id),
+        title=str(project_obj.title),
+        prompt=str(project_obj.prompt),
+        content=str(project_obj.content)
     )
 
 

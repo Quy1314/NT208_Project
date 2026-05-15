@@ -17,3 +17,5 @@ scipy>=1.12
 aiofiles>=23.0
 httpx>=0.27
 numpy>=1.26
+fal-client>=0.5
+types-python-jose>=3.3

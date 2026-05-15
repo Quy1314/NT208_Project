@@ -8,6 +8,8 @@ dotenv_path = Path(__file__).resolve().with_name(".env")
 load_dotenv(dotenv_path=dotenv_path)
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL is None:
+    raise RuntimeError("DATABASE_URL is not configured. Set it in backend/.env or the environment.")
 
 engine = create_engine(DATABASE_URL) # kết nối đến database
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) # tạo session

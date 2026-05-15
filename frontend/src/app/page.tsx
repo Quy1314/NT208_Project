@@ -196,10 +196,10 @@ function WorkspaceComposerDock({
         ? "Mô tả ảnh bạn muốn tạo (tiếng Anh thường cho kết quả tốt hơn)..."
         : isAudioModel
           ? "Nhập nội dung/lời thoại để AI tạo audio..."
-          : "Describe your story, characters, and plot here...";
+          : "Mô tả câu chuyện, nhân vật và cốt truyện của bạn...";
 
   const primaryLabel = isVideo
-    ? "Generate"
+    ? "Tạo video"
     : selectedProject
       ? isImageModel
         ? "Thêm ảnh"
@@ -210,7 +210,7 @@ function WorkspaceComposerDock({
         ? "Tạo ảnh"
         : isAudioModel
           ? "Tạo audio"
-          : "Generate";
+          : "Tạo nội dung";
 
   const busyLabel = isVideo
     ? "Đang tạo video..."
@@ -224,7 +224,7 @@ function WorkspaceComposerDock({
         ? "Đang tạo ảnh..."
         : isAudioModel
           ? "Đang tạo audio..."
-          : "Generating...";
+          : "Đang tạo nội dung...";
 
   return (
     <div
@@ -292,7 +292,7 @@ function WorkspaceComposerDock({
                     : "bg-[#2a2c31] text-[#a1a1aa] hover:text-white"
                 }`}
               >
-                Text
+                Văn bản
               </button>
               <button
                 type="button"
@@ -307,10 +307,10 @@ function WorkspaceComposerDock({
               </button>
             </div>
             <Button variant="ghost" size="sm" className="text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31]">
-              <Paperclip size={14} /> Attach
+              <Paperclip size={14} /> Đính kèm
             </Button>
             <Button variant="ghost" size="sm" className="text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31]">
-              <Mic size={14} /> Voice
+              <Mic size={14} /> Giọng nói
             </Button>
 
             <Button
@@ -338,11 +338,11 @@ function WorkspaceComposerDock({
       </div>
       {personalHfKeyActive && (
         <p className="text-center mt-2 text-[10px] text-amber-400/90 font-medium font-sans">
-          Đang dùng Hugging Face token cá nhân (Personalize).
+          Đang dùng Hugging Face token cá nhân (Cá nhân hóa).
         </p>
       )}
       <div className="text-center mt-3 text-[10px] text-slate-400 font-medium font-sans">
-        AI may display inaccurate info, so please double check the response.
+        AI có thể hiển thị thông tin chưa chính xác, vui lòng kiểm tra lại phản hồi.
       </div>
     </div>
   );
@@ -944,7 +944,7 @@ export default function DashboardPage() {
                   isDark ? "text-blue-300" : "text-blue-700"
                 }`}
               >
-                Your Prompt
+                Yêu cầu của bạn
               </p>
               <p className="text-sm font-medium whitespace-pre-wrap">{m.prompt}</p>
             </div>
@@ -960,7 +960,7 @@ export default function DashboardPage() {
               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center text-white">
                 <Sparkles size={12} />
               </div>
-              <span className="font-bold text-sm">Assistant</span>
+              <span className="font-bold text-sm">Trợ lý AI</span>
             </div>
             {m.loading && (
               <div className="flex items-center gap-2 text-slate-400 animate-pulse">
@@ -1020,7 +1020,7 @@ export default function DashboardPage() {
           }}
           onOpenSettings={() => {
             if (!selectedProject) {
-              alert("Vui lòng chọn project trước.");
+              alert("Vui lòng chọn dự án trước.");
               return;
             }
             setIsProjectSettingsOpen(true);
@@ -1094,7 +1094,7 @@ export default function DashboardPage() {
                 >
                   <div className={`px-4 py-3 mb-1 ${isDark ? "border-b border-slate-700" : "border-b border-slate-100"}`}>
                     <p className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                      Signed in as
+                      Đăng nhập với
                     </p>
                     <p className={`text-sm font-bold truncate ${isDark ? "text-slate-100" : "text-slate-900"}`}>{userEmail}</p>
                   </div>
@@ -1105,7 +1105,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     <User size={16} />
-                    User Profile
+                    Hồ sơ người dùng
                   </button>
                   <button
                     type="button"
@@ -1115,7 +1115,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     <KeyRound size={16} />
-                    Personalize
+                    Cá nhân hóa
                     {personalHfKeyActive && (
                       <span className="ml-auto rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
                         HF
@@ -1129,7 +1129,7 @@ export default function DashboardPage() {
                     }`}
                   >
                     <LogOut size={16} />
-                    Log out
+                    Đăng xuất
                   </button>
                 </div>
               )}
@@ -1159,7 +1159,7 @@ export default function DashboardPage() {
                         }
                       >
                         <FileDown size={14} />
-                        {exportingFormat ? "Đang export..." : "Export"}
+                        {exportingFormat ? "Đang xuất..." : "Xuất file"}
                       </Button>
                     )}
                     <Button
@@ -1172,29 +1172,29 @@ export default function DashboardPage() {
                           : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
                       }
                     >
-                      Xóa project
+                      Xóa dự án
                     </Button>
                   </div>
                 </div>
                 {renderVideoThread()}
                 {videoMessages.length === 0 && (
                   <p className={`text-center text-sm font-medium mt-4 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                    Nhập mô tả video dưới khung chat và nhấn Generate.
+                    Nhập mô tả video dưới khung chat và nhấn Tạo video.
                   </p>
                 )}
               </div>
             ) : showVideoStage && isCreating ? (
               <div className="max-w-3xl mx-auto pt-10 px-4 h-full flex flex-col justify-center">
                 <h2 className={`text-3xl md:text-4xl font-extrabold mb-2 tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                  Create New Project
+                  Tạo dự án mới
                 </h2>
                 <p className={`${isDark ? "text-slate-400" : "text-slate-500"} font-medium mb-8`}>
-                  Chế độ Video: nhập mô tả bên dưới để tạo video (không tạo nội dung chữ cho project).
+                  Chế độ Video: nhập mô tả bên dưới để tạo video (không tạo nội dung chữ cho dự án).
                 </p>
                 {renderVideoThread()}
                 {videoMessages.length === 0 && (
                   <p className={`text-sm font-medium text-center ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                    Nhập prompt video và nhấn Generate.
+                    Nhập prompt video và nhấn Tạo video.
                   </p>
                 )}
               </div>
@@ -1267,7 +1267,7 @@ export default function DashboardPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">Nickname</label>
+                    <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">Tên hiển thị</label>
                     <div className="w-full bg-[#2a2c31] rounded-xl px-4 py-3.5 text-[14px] font-medium text-[#f3f4f6]">
                       {userProfile?.email.split("@")[0]}
                     </div>
@@ -1281,7 +1281,7 @@ export default function DashboardPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">Created At</label>
+                    <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">Ngày tạo tài khoản</label>
                     <div className="w-full bg-[#2a2c31] rounded-xl px-4 py-3.5 text-[14px] font-medium text-[#f3f4f6]">
                       {userProfile?.created_at ? new Date(userProfile.created_at).toLocaleString("vi-VN") : "N/A"}
                     </div>
@@ -1327,7 +1327,7 @@ export default function DashboardPage() {
               <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-[#1b1c20] shadow-[0_0_40px_rgba(0,0,0,0.2)] z-50 flex flex-col animate-in slide-in-from-right duration-300">
                 <div className="flex items-center justify-between border-b border-[#32353d] px-6 py-4">
                   <div>
-                    <h3 className="text-white font-semibold">Personalize</h3>
+                    <h3 className="text-white font-semibold">Cá nhân hóa</h3>
                     <p className="text-xs text-[#8c8f99] mt-0.5">Hugging Face Inference API</p>
                   </div>
                   <button
@@ -1405,28 +1405,28 @@ export default function DashboardPage() {
               />
               <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-[#1b1c20] shadow-[0_0_40px_rgba(0,0,0,0.2)] z-50 flex flex-col animate-in slide-in-from-right duration-300">
                 <div className="flex items-center justify-between p-6">
-                  <h3 className="text-white font-semibold">Project Settings</h3>
+                  <h3 className="text-white font-semibold">Cài đặt dự án</h3>
                   <button onClick={() => setIsProjectSettingsOpen(false)} className="text-[#8c8f99] hover:text-white">
                     <X size={20} />
                   </button>
                 </div>
                 <div className="px-6 space-y-4">
                   <div className="rounded-xl bg-[#2a2c31] p-3">
-                    <p className="text-xs text-slate-300 mb-1">Project ID</p>
+                    <p className="text-xs text-slate-300 mb-1">ID dự án</p>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm text-white break-all">{selectedProject.id}</p>
                       <button onClick={() => copyText(selectedProject.id)} className="text-xs text-blue-300">
-                        Copy
+                        Sao chép
                       </button>
                     </div>
                   </div>
                   <div className="rounded-xl bg-[#2a2c31] p-3">
                     <p className="text-xs text-slate-300 mb-1">Team ID</p>
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm text-white break-all">{selectedTeamId || "Chưa chọn team"}</p>
+                      <p className="text-sm text-white break-all">{selectedTeamId || "Chưa chọn nhóm"}</p>
                       {selectedTeamId && (
                         <button onClick={() => copyText(selectedTeamId)} className="text-xs text-blue-300">
-                          Copy
+                          Sao chép
                         </button>
                       )}
                     </div>
@@ -1434,10 +1434,10 @@ export default function DashboardPage() {
                   <div className="rounded-xl bg-[#2a2c31] p-3">
                     <p className="text-xs text-slate-300 mb-1">Team Token</p>
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm text-white break-all">{teamToken || "Chưa có token (chọn team trước)"}</p>
+                      <p className="text-sm text-white break-all">{teamToken || "Chưa có token (chọn nhóm trước)"}</p>
                       {teamToken && (
                         <button onClick={() => copyText(teamToken)} className="text-xs text-blue-300">
-                          Copy
+                          Sao chép
                         </button>
                       )}
                     </div>
@@ -1456,8 +1456,8 @@ export default function DashboardPage() {
               <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-[#1b1c20] shadow-[0_0_40px_rgba(0,0,0,0.2)] z-50 flex flex-col animate-in slide-in-from-right duration-300">
                 <div className="flex items-center justify-between border-b border-[#32353d] px-6 py-4">
                   <div>
-                    <h3 className="text-white font-semibold">Export project</h3>
-                    <p className="text-xs text-[#8c8f99] mt-0.5">Tùy chọn file và translation trước khi tải</p>
+                    <h3 className="text-white font-semibold">Xuất dự án</h3>
+                    <p className="text-xs text-[#8c8f99] mt-0.5">Tùy chọn file và dịch nội dung trước khi tải</p>
                   </div>
                   <button
                     type="button"
@@ -1485,7 +1485,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2">
-                      Translation trước khi export (google-t5/t5-base)
+                      Dịch nội dung trước khi xuất (google-t5/t5-base)
                     </label>
                     <select
                       value={exportTranslationMode}
@@ -1494,11 +1494,11 @@ export default function DashboardPage() {
                       className="w-full bg-[#2a2c31] rounded-xl px-4 py-3 text-[14px] text-[#f3f4f6] outline-none border border-transparent focus:border-blue-500"
                     >
                       <option value="none">Không dịch</option>
-                      <option value="vi-to-en">Tiếng Việt → English</option>
-                      <option value="en-to-vi">English → Tiếng Việt</option>
+                      <option value="vi-to-en">Tiếng Việt → Tiếng Anh</option>
+                      <option value="en-to-vi">Tiếng Anh → Tiếng Việt</option>
                     </select>
                     <p className="mt-2 text-[11px] text-[#6b7280] leading-relaxed">
-                      Nếu bạn đã lưu HF token trong Personalize thì request translation sẽ dùng token đó.
+                      Nếu bạn đã lưu HF token trong Cá nhân hóa thì request dịch sẽ dùng token đó.
                     </p>
                   </div>
                   <button
@@ -1507,7 +1507,7 @@ export default function DashboardPage() {
                     disabled={exportingFormat !== null}
                     className="w-full rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2.5 transition-colors disabled:opacity-60"
                   >
-                    {exportingFormat !== null ? "Đang xử lý..." : "Bắt đầu export"}
+                    {exportingFormat !== null ? "Đang xử lý..." : "Bắt đầu xuất file"}
                   </button>
                 </div>
               </div>

@@ -59,7 +59,7 @@ export default function ProjectSidebar({
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white shadow-sm">
           <Sparkles size={16} />
         </div>
-        <span className={`font-bold text-lg tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>AI Assistant</span>
+        <span className={`font-bold text-lg tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>Trợ lý AI</span>
       </Link>
 
       <Button
@@ -72,12 +72,12 @@ export default function ProjectSidebar({
         }`}
       >
         <Plus size={18} />
-        New Project
+        Dự án mới
       </Button>
 
       <div className="flex-1 overflow-y-auto">
         <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 px-2">
-          Recent Projects
+          Dự án gần đây
         </div>
         <div className="space-y-1">
           {projects.map((proj) => (
@@ -91,7 +91,7 @@ export default function ProjectSidebar({
               </button>
               <button
                 onClick={(e) => onDeleteProject(proj.id, e)}
-                title="Xóa project"
+                title="Xóa dự án"
                 className={`absolute right-2 p-1 transition-opacity ${
                   selectedProject?.id === proj.id
                     ? "opacity-100 text-red-500"
@@ -107,14 +107,14 @@ export default function ProjectSidebar({
 
       <div className={`mt-3 pt-3 ${isDark ? "border-t border-slate-800" : "border-t border-slate-200"}`}>
         <div className={`text-xs font-bold uppercase tracking-wider mb-2 px-2 ${isDark ? "text-slate-300" : "text-slate-400"}`}>
-          Team Workspace
+          Không gian nhóm
         </div>
         <div className="space-y-2">
           <div className="flex gap-2">
             <Input
               value={newTeamName}
               onChange={(e) => setNewTeamName(e.target.value)}
-              placeholder="Team name"
+              placeholder="Tên nhóm"
               className={`h-8 flex-1 text-xs ${
                 isDark
                   ? "border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500"
@@ -122,7 +122,7 @@ export default function ProjectSidebar({
               }`}
             />
             <Button onClick={onCreateTeam} disabled={isCreatingTeam} className="h-8 px-2 text-xs">
-              {isCreatingTeam ? "..." : "Create"}
+              {isCreatingTeam ? "..." : "Tạo"}
             </Button>
           </div>
           <select
@@ -134,7 +134,7 @@ export default function ProjectSidebar({
                 : "border-slate-200 bg-white text-slate-900 focus:border-blue-500"
             }`}
           >
-            <option value="">Chọn team</option>
+            <option value="">Chọn nhóm</option>
             {teams.map((team) => (
               <option key={team.id} value={team.id}>{team.name}</option>
             ))}
@@ -148,7 +148,7 @@ export default function ProjectSidebar({
           className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-100 rounded-lg text-sm text-slate-700 font-medium transition-colors"
         >
           <Settings size={18} className="text-slate-400" />
-          Settings
+          Cài đặt
         </button>
       </div>
     </div>

@@ -75,7 +75,7 @@ export default function ComposerBar({
       ? "Mô tả ảnh bạn muốn tạo (tiếng Anh thường cho kết quả tốt hơn)..."
       : isAudioModel
         ? "Nhập nội dung/lời thoại để AI tạo audio..."
-        : "Describe your story, characters, and plot here...";
+        : "Mô tả câu chuyện, nhân vật và cốt truyện của bạn...";
 
   const primaryLabel = selectedProject
     ? isImageModel
@@ -87,7 +87,7 @@ export default function ComposerBar({
       ? "Tạo ảnh"
       : isAudioModel
         ? "Tạo audio"
-        : "Generate";
+        : "Tạo nội dung";
 
   const busyLabel = selectedProject
     ? isImageModel
@@ -99,7 +99,7 @@ export default function ComposerBar({
       ? "Đang tạo ảnh..."
       : isAudioModel
         ? "Đang tạo audio..."
-        : "Generating...";
+        : "Đang tạo nội dung...";
 
   return (
     <div
@@ -158,10 +158,10 @@ export default function ComposerBar({
 
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" className="text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31]">
-              <Paperclip size={14} /> Attach
+              <Paperclip size={14} /> Đính kèm
             </Button>
             <Button variant="ghost" size="sm" className="text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31]">
-              <Mic size={14} /> Voice
+              <Mic size={14} /> Giọng nói
             </Button>
 
             <Button
@@ -189,11 +189,11 @@ export default function ComposerBar({
       </div>
       {personalHfKeyActive && (
         <p className="text-center mt-2 text-[10px] text-amber-400/90 font-medium font-sans">
-          Đang dùng Hugging Face token cá nhân (Personalize).
+          Đang dùng Hugging Face token cá nhân (Cá nhân hóa).
         </p>
       )}
       <div className="text-center mt-3 text-[10px] text-slate-400 font-medium font-sans">
-        AI may display inaccurate info, so please double check the response.
+        AI có thể hiển thị thông tin chưa chính xác, vui lòng kiểm tra lại phản hồi.
       </div>
     </div>
   );
