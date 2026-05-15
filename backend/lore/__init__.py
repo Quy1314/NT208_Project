@@ -1,1 +1,1 @@
-"""Canonical lore ORM models (import side-effects register tables on Base)."""
+"""Model ORM lore canon; import để đăng ký bảng vào Base."""

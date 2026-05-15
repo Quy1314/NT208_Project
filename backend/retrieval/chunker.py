@@ -1,4 +1,4 @@
-"""Split long prose into chunks for embedding / retrieval."""
+"""Chia prose dài thành chunk để embedding và retrieval."""
 
 from __future__ import annotations
 

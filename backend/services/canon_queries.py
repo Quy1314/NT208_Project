@@ -1,4 +1,4 @@
-"""Load canonical rows for scene compilation and story context."""
+"""Tải dữ liệu canon cho compile scene và context truyện."""
 
 from __future__ import annotations
 
@@ -112,7 +112,7 @@ def format_structured_context_pack(
     scope_id: uuid.UUID,
     focus_character_slug: str | None,
 ) -> str:
-    """Human-readable canon facts for LLM context (not sliding-window prose)."""
+    """Fact canon dễ đọc cho context LLM, không phải prose sliding-window."""
     lines: list[str] = ["=== CANON FACTS (structured; obey over prose drift) ==="]
 
     chars = list_characters(db, scope_id)

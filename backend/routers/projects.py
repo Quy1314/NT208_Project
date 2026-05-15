@@ -395,7 +395,7 @@ def _looks_like_low_quality_translation(source_text: str, translated_text: str) 
     if len(tokens) < 6:
         return len(source) > 40
 
-    # Consecutive identical words usually indicate degenerate generation.
+    # Từ lặp liên tiếp thường báo hiệu generation bị suy biến.
     streak = 1
     longest_streak = 1
     for i in range(1, len(tokens)):
@@ -619,7 +619,7 @@ def create_project(
     Bắt buộc có JWT Token.
     Optional: header X-HF-Api-Key — key HF tạm của user (không lưu server).
     """
-    # Check model kind: audio / image / text LLM
+    # Kiểm tra loại model: audio, image hoặc text LLM.
     audio_models = [FPT_TTS_MODEL]
     is_audio_model = data.model_name and data.model_name in audio_models
     is_image_model = bool(data.model_name and data.model_name in HF_IMAGE_MODELS)

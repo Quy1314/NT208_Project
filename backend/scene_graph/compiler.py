@@ -1,4 +1,4 @@
-"""Compile deterministic SceneGraph from canon DB + intent hints."""
+"""Compile SceneGraph deterministic từ DB canon và gợi ý intent."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def extract_intent_hints_heuristic(intent: str, db: Session, scope_id: uuid.UUID
             loc_slug = loc.slug
             break
 
-    # landmarks / fan vocabulary
+    # Landmark và từ vựng fan.
     if loc_slug is None:
         if "indigo" in low:
             loc_slug = "indigo_plateau"

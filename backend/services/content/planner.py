@@ -40,7 +40,7 @@ def plan_audio_prompt(prompt: str, language: str = "vietnamese") -> ExecutionPla
     """
     Analyze prompt and return a normalized audio execution plan.
     """
-    # Planner is intentionally deterministic here to avoid extra model dependency.
+    # Planner cố ý deterministic để tránh phụ thuộc thêm vào model.
     raw_plan = _fallback_plan(prompt, language)
 
     plan: ExecutionPlan = {

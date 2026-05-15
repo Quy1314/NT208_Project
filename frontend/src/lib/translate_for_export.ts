@@ -1,4 +1,4 @@
-import { getPersonalHfApiKey } from "@/lib/personalHf";
+import { getPersonalHfApiKey } from "@/lib/personal_hf";
 import { API_BASE_URL } from "@/lib/api";
 
 export type TranslationMode = "none" | "vi-to-en" | "en-to-vi";

@@ -1,4 +1,4 @@
-"""Pydantic schemas for scene graphs and diffusion recipes."""
+"""Schema Pydantic cho scene graph và diffusion recipe."""
 
 from __future__ import annotations
 

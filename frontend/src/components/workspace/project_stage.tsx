@@ -39,7 +39,7 @@ function renderGeneratedContent(content: string, isDark: boolean) {
       {segments.map((seg, i) => {
         if (seg.startsWith("data:image/")) {
           return (
-            // eslint-disable-next-line @next/next/no-img-element -- HF returns inline data URLs
+            // eslint-disable-next-line @next/next/no-img-element -- HF trả về data URL inline
             <img
               key={i}
               src={seg}

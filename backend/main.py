@@ -39,8 +39,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Rate limit in-memory
+# Rate limit lưu trong memory:
+# - Tối đa 10 request / 5 giây cho mỗi client.
+# - Nếu vượt ngưỡng: chặn 5 phút.
 WINDOW_SECONDS = 5
 MAX_REQUESTS_IN_WINDOW = 10
 BLOCK_SECONDS = 300

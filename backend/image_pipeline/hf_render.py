@@ -1,4 +1,4 @@
-"""Render DiffusionRecipe via Hugging Face Inference (text-to-image)."""
+"""Render DiffusionRecipe qua Hugging Face Inference text-to-image."""
 
 from __future__ import annotations
 

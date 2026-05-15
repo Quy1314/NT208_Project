@@ -19,7 +19,7 @@ class Project(Base):
     __tablename__ = "projects"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
-    # Map Python attribute user_id -> DB column owner_id for backward compatibility.
+    # Map thuộc tính Python user_id sang cột DB owner_id để tương thích ngược.
     user_id = Column("owner_id", UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     prompt = Column(Text, nullable=False)
@@ -95,7 +95,7 @@ class AudioJob(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 # ==========================================
-# PYDANTIC SCHEMAS (Data Validation Models)
+# SCHEMA PYDANTIC cho validate dữ liệu.
 # ==========================================
 from typing import Literal
 from pydantic import BaseModel

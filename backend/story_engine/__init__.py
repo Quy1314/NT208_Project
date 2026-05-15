@@ -1,1 +1,1 @@
-"""Story context pack builder."""
+"""Bộ dựng context pack cho truyện."""

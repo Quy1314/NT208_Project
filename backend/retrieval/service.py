@@ -1,4 +1,4 @@
-"""Retrieval: index lore chunks + semantic search + context packs."""
+"""Retrieval: index lore chunk, semantic search và context pack."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def reindex_project_prose(
     replace: bool = True,
     source: str = "project_content",
 ) -> int:
-    """Chunk + embed project prose into lore_chunk."""
+    """Chia chunk và embed prose của project vào lore_chunk."""
     if replace:
         db.execute(delete(LoreChunk).where(LoreChunk.scope_id == scope_id, LoreChunk.source == source))
         db.commit()
@@ -87,7 +87,7 @@ def semantic_search_chunks(
     hf_api_key: str | None,
     top_k: int = TOP_K_DEFAULT,
 ) -> list[tuple[str, float]]:
-    """Return (chunk_text, similarity score). Uses Python cosine vs embedded chunks."""
+    """Trả về chunk_text và điểm similarity bằng cosine Python."""
     qvec = embed_query(query, hf_api_key)
     rows = (
         db.query(LoreChunk)
@@ -111,7 +111,7 @@ def append_chunks_for_new_segment(
     segment: str,
     hf_api_key: str | None,
 ) -> int:
-    """After story continuation, embed only the new segment (append rows)."""
+    """Sau khi viết tiếp truyện, chỉ embed segment mới và append row."""
     pieces = chunk_text(segment or "", max_chars=int(os.getenv("CANON_CHUNK_CHARS", "900")))
     if not pieces:
         return 0

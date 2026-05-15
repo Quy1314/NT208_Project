@@ -26,6 +26,7 @@ type ComposerBarProps = {
   modelName: string;
   setModelName: (v: string) => void;
   isImageModel: boolean;
+  isAudioModel: boolean;
   creativity: string;
   setCreativity: (v: string) => void;
   language: "vietnamese" | "english";
@@ -49,6 +50,7 @@ export default function ComposerBar({
   modelName,
   setModelName,
   isImageModel,
+  isAudioModel,
   creativity,
   setCreativity,
   language,
@@ -66,26 +68,38 @@ export default function ComposerBar({
   const placeholderText = selectedProject
     ? isImageModel
       ? "Mô tả ảnh tiếp theo (tiếng Anh thường cho kết quả tốt hơn)..."
-      : "Nhập yêu cầu để AI viết tiếp dự án này..."
+      : isAudioModel
+        ? "Nhập nội dung hoặc lời thoại để tạo audio tiếp theo..."
+        : "Nhập yêu cầu để AI viết tiếp dự án này..."
     : isImageModel
       ? "Mô tả ảnh bạn muốn tạo (tiếng Anh thường cho kết quả tốt hơn)..."
-      : "Describe your story, characters, and plot here...";
+      : isAudioModel
+        ? "Nhập nội dung/lời thoại để AI tạo audio..."
+        : "Describe your story, characters, and plot here...";
 
   const primaryLabel = selectedProject
     ? isImageModel
       ? "Thêm ảnh"
-      : "Viết tiếp"
+      : isAudioModel
+        ? "Thêm audio"
+        : "Viết tiếp"
     : isImageModel
       ? "Tạo ảnh"
-      : "Generate";
+      : isAudioModel
+        ? "Tạo audio"
+        : "Generate";
 
   const busyLabel = selectedProject
     ? isImageModel
       ? "Đang tạo ảnh..."
-      : "Đang viết tiếp..."
+      : isAudioModel
+        ? "Đang tạo audio..."
+        : "Đang viết tiếp..."
     : isImageModel
       ? "Đang tạo ảnh..."
-      : "Generating...";
+      : isAudioModel
+        ? "Đang tạo audio..."
+        : "Generating...";
 
   return (
     <div
@@ -121,7 +135,7 @@ export default function ComposerBar({
                 </optgroup>
               ))}
             </select>
-            {!isImageModel && (
+            {!isImageModel && !isAudioModel && (
               <select
                 value={creativity}
                 onChange={(e) => setCreativity(e.target.value)}

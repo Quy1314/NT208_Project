@@ -1,1 +1,1 @@
-"""Canonical lore ORM models — import registers tables."""
+"""Model ORM lore canon; import để đăng ký bảng."""

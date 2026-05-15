@@ -1,4 +1,4 @@
-"""Story context pack: structured canon + semantic lore chunks (+ optional tone tail)."""
+"""Context pack: canon có cấu trúc, lore semantic và tone tùy chọn."""
 
 from __future__ import annotations
 

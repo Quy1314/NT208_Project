@@ -4,19 +4,24 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { API_BASE_URL } from "@/lib/api";
-import { downloadMarkdown, downloadPdf, downloadWord } from "@/lib/exportProject";
-import { clearPersonalHfApiKey, getPersonalHfApiKey, setPersonalHfApiKey } from "@/lib/personalHf";
-import { TranslationMode, translateProjectForExport } from "@/lib/translateForExport";
-import { getTemplatePromptById } from "@/lib/landingTemplates";
+import { downloadMarkdown, downloadPdf, downloadWord } from "@/lib/export_project";
+import { clearPersonalHfApiKey, getPersonalHfApiKey, setPersonalHfApiKey } from "@/lib/personal_hf";
+import { TranslationMode, translateProjectForExport } from "@/lib/translate_for_export";
+import { getTemplatePromptById } from "@/lib/landing_templates";
 import {
-  ALL_HF_MODEL_IDS,
-  HF_IMAGE_MODEL_OPTIONS,
-  HF_MODEL_GROUPS,
+  toProjectContinueApiPayload,
+  toProjectCreateApiPayload,
+} from "@/lib/api_adapters";
+import {
+  allHfModelIds,
+  hfImageModelOptions,
+  hfModelGroups,
+  isAudioModelId,
   isImageModelId,
-} from "@/lib/hfModels";
-import ProjectSidebar from "@/components/workspace/ProjectSidebar";
-import ProjectStage from "@/components/workspace/ProjectStage";
-import type { ModelGroup } from "@/components/workspace/ComposerBar";
+} from "@/lib/hf_models";
+import ProjectSidebar from "@/components/workspace/project_sidebar";
+import ProjectStage from "@/components/workspace/project_stage";
+import type { ModelGroup } from "@/components/workspace/composer_bar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -133,6 +138,7 @@ type WorkspaceComposerDockProps = {
   modelName: string;
   setModelName: (v: string) => void;
   isImageModel: boolean;
+  isAudioModel: boolean;
   creativity: string;
   setCreativity: (v: string) => void;
   language: "vietnamese" | "english";
@@ -159,6 +165,7 @@ function WorkspaceComposerDock({
   modelName,
   setModelName,
   isImageModel,
+  isAudioModel,
   creativity,
   setCreativity,
   language,
@@ -182,30 +189,42 @@ function WorkspaceComposerDock({
     : selectedProject
       ? isImageModel
         ? "Mô tả ảnh tiếp theo (tiếng Anh thường cho kết quả tốt hơn)..."
-        : "Nhập yêu cầu để AI viết tiếp dự án này..."
+        : isAudioModel
+          ? "Nhập nội dung hoặc lời thoại để tạo audio tiếp theo..."
+          : "Nhập yêu cầu để AI viết tiếp dự án này..."
       : isImageModel
         ? "Mô tả ảnh bạn muốn tạo (tiếng Anh thường cho kết quả tốt hơn)..."
-        : "Describe your story, characters, and plot here...";
+        : isAudioModel
+          ? "Nhập nội dung/lời thoại để AI tạo audio..."
+          : "Describe your story, characters, and plot here...";
 
   const primaryLabel = isVideo
     ? "Generate"
     : selectedProject
       ? isImageModel
         ? "Thêm ảnh"
-        : "Viết tiếp"
+        : isAudioModel
+          ? "Thêm audio"
+          : "Viết tiếp"
       : isImageModel
         ? "Tạo ảnh"
-        : "Generate";
+        : isAudioModel
+          ? "Tạo audio"
+          : "Generate";
 
   const busyLabel = isVideo
     ? "Đang tạo video..."
     : selectedProject
       ? isImageModel
         ? "Đang tạo ảnh..."
-        : "Đang viết tiếp..."
+        : isAudioModel
+          ? "Đang tạo audio..."
+          : "Đang viết tiếp..."
       : isImageModel
         ? "Đang tạo ảnh..."
-        : "Generating...";
+        : isAudioModel
+          ? "Đang tạo audio..."
+          : "Generating...";
 
   return (
     <div
@@ -241,7 +260,7 @@ function WorkspaceComposerDock({
                 </optgroup>
               ))}
             </select>
-            {!isImageModel && (
+            {!isVideo && !isImageModel && !isAudioModel && (
               <select
                 value={creativity}
                 onChange={(e) => setCreativity(e.target.value)}
@@ -347,6 +366,7 @@ export default function DashboardPage() {
   const [isContinuing, setIsContinuing] = useState(false);
   const [modelName, setModelName] = useState("Qwen/Qwen2.5-72B-Instruct");
   const isImageModel = isImageModelId(modelName);
+  const isAudioModel = isAudioModelId(modelName);
   const [creativity, setCreativity] = useState("Balanced");
   const [language, setLanguage] = useState<"vietnamese" | "english">("vietnamese");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -447,8 +467,8 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (!ALL_HF_MODEL_IDS.includes(modelName)) {
-      setModelName(ALL_HF_MODEL_IDS[0]);
+    if (!allHfModelIds.includes(modelName)) {
+      setModelName(allHfModelIds[0]);
     }
   }, [modelName]);
 
@@ -673,7 +693,7 @@ export default function DashboardPage() {
       const res = await fetch(`${API_BASE_URL}/api/projects/`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify({ title: finalTitle, prompt, language, model_name: modelName.trim() }),
+        body: JSON.stringify(toProjectCreateApiPayload({ title: finalTitle, prompt, language, modelName: modelName.trim() })),
       });
       if (res.ok) {
         const data = await res.json();
@@ -717,7 +737,7 @@ export default function DashboardPage() {
       const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/continue`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify({ prompt: continuePrompt, language, model_name: modelName.trim() }),
+        body: JSON.stringify(toProjectContinueApiPayload({ prompt: continuePrompt, language, modelName: modelName.trim() })),
       });
       if (res.ok) {
         const data = await res.json();
@@ -1202,11 +1222,12 @@ export default function DashboardPage() {
             continuePrompt={continuePrompt}
             setPrompt={setPrompt}
             setContinuePrompt={setContinuePrompt}
-            modelGroups={HF_MODEL_GROUPS}
-            allModelIds={ALL_HF_MODEL_IDS}
+            modelGroups={hfModelGroups}
+            allModelIds={allHfModelIds}
             modelName={modelName}
             setModelName={setModelName}
             isImageModel={isImageModel}
+            isAudioModel={isAudioModel}
             creativity={creativity}
             setCreativity={setCreativity}
             language={language}
@@ -1360,7 +1381,7 @@ export default function DashboardPage() {
                   <div className="rounded-xl border border-[#32353d] bg-[#111317] p-3">
                     <p className="text-[11px] font-semibold text-[#cdd0d5] mb-2">Model ảnh free gợi ý (Hugging Face)</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {HF_IMAGE_MODEL_OPTIONS.map((id) => (
+                      {hfImageModelOptions.map((id) => (
                         <span
                           key={id}
                           className="rounded-md bg-[#2a2c31] px-2 py-1 text-[10px] font-mono text-[#d1d5db]"

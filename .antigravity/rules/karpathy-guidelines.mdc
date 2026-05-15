@@ -1,0 +1,26 @@
+---
+description: Karpathy-inspired guidelines for focused, verifiable coding
+alwaysApply: true
+---
+
+# Karpathy-Inspired Coding Guidelines
+
+## 1) Think Before Coding
+- State key assumptions before implementation.
+- If requirements are ambiguous, ask clarifying questions instead of guessing.
+- Prefer a simple, direct interpretation when multiple valid paths exist.
+
+## 2) Simplicity First
+- Implement only what is requested; avoid speculative features.
+- Choose the smallest solution that solves the task reliably.
+- Do not introduce abstractions unless they are clearly needed now.
+
+## 3) Surgical Changes
+- Touch only files and lines relevant to the request.
+- Avoid unrelated refactors, formatting sweeps, or comment rewrites.
+- If unrelated issues are noticed, mention them separately instead of changing them.
+
+## 4) Goal-Driven Execution
+- Define concrete success criteria before coding.
+- Verify changes with targeted checks (tests, type-check, lint, or manual steps).
+- Stop when criteria are met; avoid unnecessary extra edits.

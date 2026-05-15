@@ -43,7 +43,7 @@ export default function ChatComposer() {
   const token = React.useMemo(() => getStoredToken(), []);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when messages change
+  // Tự cuộn xuống cuối khi messages thay đổi
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -69,7 +69,7 @@ export default function ChatComposer() {
     const userMessage = input.trim();
     setInput("");
 
-    // Add user message to chat
+    // Thêm tin nhắn người dùng vào chat
     const userMsgId = `user-${Date.now()}`;
     setMessages((prev) => [...prev, { id: userMsgId, role: "user", content: userMessage }]);
 
@@ -79,7 +79,7 @@ export default function ChatComposer() {
       let response: ProjectResponse;
 
       if (!projectId) {
-        // First message: create new project
+        // Tin đầu tiên: tạo project mới
         const createRes = await fetch(`${API_BASE_URL}/api/projects/`, {
           method: "POST",
           headers: {
@@ -100,7 +100,7 @@ export default function ChatComposer() {
         response = (await createRes.json()) as ProjectResponse;
         setProjectId(response.id);
       } else {
-        // Subsequent message: continue project
+        // Tin tiếp theo: viết tiếp project
         const continueRes = await fetch(
           `${API_BASE_URL}/api/projects/${projectId}/continue`,
           {
@@ -123,7 +123,7 @@ export default function ChatComposer() {
         response = (await continueRes.json()) as ProjectResponse;
       }
 
-      // Add AI message to chat
+      // Thêm phản hồi AI vào chat
       const aiMsgId = `ai-${Date.now()}`;
       setMessages((prev) => [
         ...prev,
@@ -135,7 +135,7 @@ export default function ChatComposer() {
           ? err.message
           : "Lỗi xảy ra khi gửi tin nhắn. Vui lòng thử lại."
       );
-      // Remove user message if request failed
+      // Xóa tin nhắn người dùng nếu request lỗi
       setMessages((prev) => prev.slice(0, -1));
     } finally {
       setLoading(false);
@@ -144,7 +144,7 @@ export default function ChatComposer() {
 
   return (
     <div className="flex flex-col h-screen bg-white">
-      {/* Messages Container */}
+      {/* Khung messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-400">
@@ -173,7 +173,7 @@ export default function ChatComposer() {
           ))
         )}
 
-        {/* Loading state */}
+        {/* Trạng thái loading */}
         {loading && (
           <div className="flex justify-start">
             <div className="bg-gray-200 text-gray-900 px-4 py-2 rounded-lg">
@@ -185,7 +185,7 @@ export default function ChatComposer() {
           </div>
         )}
 
-        {/* Error message */}
+        {/* Thông báo lỗi */}
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded-lg text-sm">
             {error}
@@ -195,7 +195,7 @@ export default function ChatComposer() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Bar */}
+      {/* Thanh nhập liệu */}
       <div className="border-t border-gray-300 bg-white p-4">
         <form onSubmit={handleSendMessage} className="space-y-3">
           {!projectId && (

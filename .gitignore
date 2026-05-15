@@ -11,3 +11,4 @@ __pycache__/
 *.pyc
 .agent/
 FEATURES.md
+.antigravity/mcp.json

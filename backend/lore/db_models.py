@@ -23,12 +23,12 @@ from sqlalchemy.orm import relationship
 
 from database import Base
 
-# MiniLM-L6-v2 dimension (HF embedding API default)
+# Kích thước MiniLM-L6-v2, mặc định của HF embedding API.
 LORE_EMBEDDING_DIM = 384
 
 
 class CanonScope(Base):
-    """One canonical universe scope per project (MVP)."""
+    """Một scope universe canon cho mỗi project trong MVP."""
 
     __tablename__ = "canon_scope"
 
@@ -224,5 +224,5 @@ class LoreAsset(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 
-# Fix forward ref: CanonCharacter.active_visual_variant_id -> CharacterVisualVariant
-# SQLAlchemy resolves FK; optional explicit remote_side not needed for MVP.
+# Sửa forward ref từ active_visual_variant_id sang CharacterVisualVariant.
+# SQLAlchemy tự resolve FK; MVP chưa cần remote_side tường minh.

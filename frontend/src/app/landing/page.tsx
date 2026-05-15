@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { LANDING_TEMPLATES } from "@/lib/landingTemplates";
+import { LANDING_TEMPLATES } from "@/lib/landing_templates";
 import { ChevronDown, LayoutDashboard, LogOut } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -35,6 +35,38 @@ export default function LandingPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    const target = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    const current = { ...target };
+    let rafId = 0;
+
+    const animate = () => {
+      current.x += (target.x - current.x) * 0.08;
+      current.y += (target.y - current.y) * 0.08;
+
+      root.style.setProperty("--gravity-x", `${current.x}px`);
+      root.style.setProperty("--gravity-y", `${current.y}px`);
+      root.style.setProperty("--gravity-x-ratio", `${current.x / window.innerWidth}`);
+      root.style.setProperty("--gravity-y-ratio", `${current.y / window.innerHeight}`);
+
+      rafId = requestAnimationFrame(animate);
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      target.x = event.clientX;
+      target.y = event.clientY;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    rafId = requestAnimationFrame(animate);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      cancelAnimationFrame(rafId);
+    };
+  }, []);
+
   const handleLogout = () => {
     localStorage.removeItem("access_token");
     localStorage.removeItem("user_email");
@@ -50,9 +82,9 @@ export default function LandingPage() {
   }, [activeCategory]);
 
   return (
-    <main className="min-h-screen bg-[#040812] text-slate-100">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(34,211,238,0.18),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.22),transparent_30%)]" />
-      <section className="relative mx-auto max-w-6xl px-6 pb-14 pt-8">
+    <main className="gravity-surface min-h-screen bg-[#040812] text-slate-100">
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_15%_20%,rgba(34,211,238,0.18),transparent_35%),radial-gradient(circle_at_80%_0%,rgba(99,102,241,0.22),transparent_30%)]" />
+      <section className="relative z-10 mx-auto max-w-6xl px-6 pb-14 pt-8">
         <header className="sticky top-4 z-40 mb-10 flex items-center justify-between rounded-2xl border border-white/10 bg-[#0b1220] px-5 py-4 shadow-lg shadow-black/30">
           <div>
             <p className="text-[11px] uppercase tracking-[0.22em] text-cyan-300">AI Agent Studio</p>
@@ -108,7 +140,7 @@ export default function LandingPage() {
         </header>
 
         <div className="mb-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-[#111827] to-[#0b1220] p-8 shadow-2xl shadow-black/30">
+          <div className="gravity-card rounded-3xl border border-white/10 bg-gradient-to-br from-[#111827] to-[#0b1220] p-8 shadow-2xl shadow-black/30">
             <h2 className="max-w-2xl text-3xl font-bold leading-tight sm:text-4xl">
               Tạo mẫu hình ảnh/video bằng AI, rồi tiếp tục làm ngay trong workspace.
             </h2>
@@ -134,7 +166,7 @@ export default function LandingPage() {
               "Tinh chỉnh theo workflow thiết kế",
               "Làm tiếp trong chat workspace",
             ].map((step, i) => (
-              <div key={step} className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+              <div key={step} className="gravity-card rounded-2xl border border-white/10 bg-slate-900/60 p-4">
                 <p className="text-xs font-semibold text-cyan-300">BƯỚC {i + 1}</p>
                 <p className="mt-1 text-sm text-slate-100">{step}</p>
               </div>
@@ -143,7 +175,7 @@ export default function LandingPage() {
         </div>
 
         <section>
-          <div className="mb-5 rounded-2xl border border-cyan-400/20 bg-gradient-to-r from-cyan-500/15 via-indigo-500/15 to-purple-500/15 px-5 py-4 shadow-[0_10px_40px_rgba(34,211,238,0.12)]">
+          <div className="gravity-card mb-5 rounded-2xl border border-cyan-400/20 bg-gradient-to-r from-cyan-500/15 via-indigo-500/15 to-purple-500/15 px-5 py-4 shadow-[0_10px_40px_rgba(34,211,238,0.12)]">
             <h3 className="text-xl font-extrabold tracking-tight sm:text-2xl">
               Prompt Gallery - AI Visual Showcase
             </h3>
@@ -177,7 +209,7 @@ export default function LandingPage() {
             {filteredTemplates.map((tpl) => (
               <article
                 key={tpl.id}
-                className="group overflow-hidden rounded-2xl border border-white/10 bg-slate-900/70 shadow-lg shadow-black/25 transition hover:-translate-y-1 hover:border-cyan-400/35"
+                className="gravity-card group overflow-hidden rounded-2xl border border-white/10 bg-slate-900/70 shadow-lg shadow-black/25 transition hover:-translate-y-1 hover:border-cyan-400/35"
               >
                 <div className="relative aspect-video bg-black">
                   {tpl.category === "video" ? (

@@ -1,1 +1,1 @@
-"""HF render + repair pipeline entrypoints."""
+"""Entrypoint render HF và repair pipeline."""

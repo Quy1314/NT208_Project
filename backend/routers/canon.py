@@ -1,4 +1,4 @@
-"""REST API for canonical lore bootstrap (per-project canon_scope)."""
+"""REST API bootstrap lore canon theo canon_scope từng project."""
 
 from __future__ import annotations
 

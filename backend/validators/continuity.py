@@ -1,4 +1,4 @@
-"""Continuity validation for scene graphs vs canonical DB."""
+"""Kiểm tra continuity giữa scene graph và DB canon."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def validate_scene_against_db(db: Session, scene: SceneGraph) -> ValidationRepor
         if not db_ch or db_ch.id != ch.character_id:
             rep.add(f"character mismatch for slug {ch.slug}")
 
-    # Party integrity for primary character (single-owner MVP).
+    # Kiểm tra party của nhân vật chính trong MVP một owner.
     if scene.characters:
         ch0 = scene.characters[0]
         party_db = cq.get_party_rows(db, ch0.character_id)

@@ -1,6 +1,6 @@
 "use client";
 
-import AuthShell from "@/components/auth/AuthShell";
+import AuthShell from "@/components/auth/auth_shell";
 import { API_BASE_URL } from "@/lib/api";
 import Link from "next/link";
 import { FormEvent, useState } from "react";

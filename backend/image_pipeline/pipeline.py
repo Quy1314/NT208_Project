@@ -1,4 +1,4 @@
-"""Orchestrate compile → recipe → validate → render → repair."""
+"""Điều phối compile → recipe → validate → render → repair."""
 
 from __future__ import annotations
 

@@ -1,7 +1,8 @@
 "use client";
 
-import AuthShell from "@/components/auth/AuthShell";
+import AuthShell from "@/components/auth/auth_shell";
 import { API_BASE_URL } from "@/lib/api";
+import { toResetPasswordApiPayload } from "@/lib/api_adapters";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
@@ -30,7 +31,7 @@ export default function ResetPasswordPage() {
       const res = await fetch(`${API_BASE_URL}/api/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, new_password: newPassword }),
+        body: JSON.stringify(toResetPasswordApiPayload({ token, newPassword })),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Có lỗi xảy ra.");

@@ -1,4 +1,4 @@
-"""Build DiffusionRecipe from SceneGraph + VisualBible (no hand-written raw prompts)."""
+"""Dựng DiffusionRecipe từ SceneGraph và VisualBible, không viết raw prompt thủ công."""
 
 from __future__ import annotations
 

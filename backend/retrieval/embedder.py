@@ -1,4 +1,4 @@
-"""Hugging Face feature-extraction embeddings (MiniLM 384-dim)."""
+"""Embedding feature-extraction Hugging Face, MiniLM 384 chiều."""
 
 from __future__ import annotations
 

@@ -71,7 +71,7 @@ def _poll_audio(async_url: str, timeout_seconds: float = 60.0) -> bytes:
             if res.status_code not in (202, 404):
                 raise RuntimeError(f"FPT async URL trả status {res.status_code}.")
         except requests.RequestException as exc:
-            # Network glitches are retried until timeout.
+            # Retry lỗi mạng tạm thời cho đến khi timeout.
             if (time.monotonic() - start) > timeout_seconds:
                 raise RuntimeError(f"Lỗi kết nối khi poll FPT audio: {str(exc)}") from exc
 

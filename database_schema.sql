@@ -1,16 +1,20 @@
 -- =====================================================
--- AI Content Generator - Product-ready PostgreSQL schema
+-- AI Content Generator - schema PostgreSQL sẵn sàng production
 -- =====================================================
--- Notes:
--- 1) This script is safe to run on a fresh database.
--- 2) Existing core fields from current backend are preserved:
+-- Ghi chú:
+-- 1) Script này an toàn khi chạy trên database mới.
+-- 2) Giữ nguyên các field lõi backend hiện tại:
 --    users(email, password_hash, is_remember), projects(title, prompt, content).
--- 3) Backward-compat mapping for current backend:
+-- 3) Ánh xạ tương thích ngược cho backend hiện tại:
 --    - models.Project.user_id  -> projects.owner_id
---    - auth/projects endpoints can keep reading prompt/content unchanged.
--- 4) Suggested migration from old schema:
+--    - endpoint auth/projects vẫn đọc prompt/content như cũ.
+-- 4) Bao gồm bảng tương thích cho model SQLAlchemy hiện tại:
+--    password_reset_tokens, team_workspaces, project_team_tokens, audio_files, audio_jobs.
+-- 5) Gợi ý migrate từ schema cũ:
 --    ALTER TABLE projects RENAME COLUMN user_id TO owner_id;
---    -- Then re-create FK/index with new column name if needed.
+--    -- Sau đó tạo lại FK/index theo tên cột mới nếu cần.
+-- 6) Với database production đã có dữ liệu lớn, tạo index trong migration riêng bằng
+--    CREATE INDEX CONCURRENTLY ngoài transaction block này.
 
 BEGIN;
 
@@ -21,7 +25,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "citext";
 
 -- --------------------
--- Shared update trigger
+-- Trigger cập nhật dùng chung
 -- --------------------
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER AS $$
@@ -32,7 +36,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- --------------------
--- Identity domain
+-- Nhóm định danh
 -- --------------------
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -63,7 +67,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 );
 
 -- --------------------
--- Collaboration domain
+-- Nhóm cộng tác
 -- --------------------
 CREATE TABLE IF NOT EXISTS teams (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -88,7 +92,7 @@ CREATE TABLE IF NOT EXISTS team_members (
 );
 
 -- --------------------
--- Project/content domain
+-- Nhóm project/nội dung
 -- --------------------
 CREATE TABLE IF NOT EXISTS projects (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -101,7 +105,7 @@ CREATE TABLE IF NOT EXISTS projects (
         CHECK (visibility IN ('private', 'team', 'shared_link')),
     status VARCHAR(20) NOT NULL DEFAULT 'draft'
         CHECK (status IN ('draft', 'active', 'archived')),
-    -- Compatibility with current backend payload.
+    -- Tương thích payload backend hiện tại.
     prompt TEXT NOT NULL DEFAULT '',
     content TEXT NOT NULL DEFAULT '',
     summary TEXT,
@@ -125,6 +129,52 @@ CREATE TABLE IF NOT EXISTS project_context_entries (
 -- ALTER TABLE project_context_entries DROP CONSTRAINT IF EXISTS project_context_entries_project_id_fkey;
 -- ALTER TABLE project_context_entries ADD CONSTRAINT project_context_entries_project_id_fkey
 --   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
+
+-- Bảng tương thích phản ánh model SQLAlchemy hiện tại.
+-- Chỉ thêm mới để bootstrap schema khớp với Base.metadata.create_all().
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS team_workspaces (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(120) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS project_team_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    team_id UUID NOT NULL REFERENCES team_workspaces(id) ON DELETE CASCADE,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS audio_files (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    audio_url TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS audio_jobs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    prompt TEXT NOT NULL,
+    language VARCHAR(20) NOT NULL DEFAULT 'vietnamese',
+    status VARCHAR(20) NOT NULL DEFAULT 'queued'
+        CHECK (status IN ('queued', 'processing', 'done', 'failed')),
+    result_path TEXT,
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS project_members (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -228,7 +278,7 @@ CREATE TABLE IF NOT EXISTS attachments (
 );
 
 -- --------------------
--- AI generation domain
+-- Nhóm sinh nội dung AI
 -- --------------------
 CREATE TABLE IF NOT EXISTS ai_providers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -292,7 +342,7 @@ CREATE TABLE IF NOT EXISTS generation_outputs (
 );
 
 -- --------------------
--- Governance / auditing
+-- Quản trị / audit
 -- --------------------
 CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -311,34 +361,77 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- --------------------
 -- Indexes
 -- --------------------
+-- Index lõi cho định danh và tương thích.
+CREATE INDEX IF NOT EXISTS idx_users_status_deleted_at ON users(status, deleted_at);
+CREATE INDEX IF NOT EXISTS idx_users_last_login_at ON users(last_login_at DESC);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_token ON password_reset_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_team_workspaces_owner_id ON team_workspaces(owner_id);
+CREATE INDEX IF NOT EXISTS idx_project_team_tokens_project_id ON project_team_tokens(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_team_tokens_team_id ON project_team_tokens(team_id);
+CREATE INDEX IF NOT EXISTS idx_project_team_tokens_token ON project_team_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_audio_files_project_id ON audio_files(project_id);
+CREATE INDEX IF NOT EXISTS idx_audio_jobs_user_id ON audio_jobs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audio_jobs_status_created_at ON audio_jobs(status, created_at DESC);
+
+-- Index cho cộng tác và dashboard project.
+CREATE INDEX IF NOT EXISTS idx_teams_owner_id ON teams(owner_id);
+CREATE INDEX IF NOT EXISTS idx_teams_owner_active ON teams(owner_id, created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_team_members_user_role ON team_members(user_id, role);
 CREATE INDEX IF NOT EXISTS idx_projects_owner_id ON projects(owner_id);
 CREATE INDEX IF NOT EXISTS idx_projects_team_id ON projects(team_id);
 CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_deleted_at ON projects(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_projects_owner_active_updated ON projects(owner_id, updated_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_projects_team_active_updated ON projects(team_id, updated_at DESC) WHERE deleted_at IS NULL AND team_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_projects_owner_status ON projects(owner_id, status) WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_project_members_project_id ON project_members(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_project_context_entries_project_id ON project_context_entries(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_context_entries_created_at ON project_context_entries(project_id, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_project_shares_project_id ON project_shares(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_shares_token_active ON project_shares(token) WHERE revoked_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_project_chapters_project_id ON project_chapters(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_chapters_project_status ON project_chapters(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_project_versions_project_id ON project_versions(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_versions_chapter_id ON project_versions(chapter_id);
+CREATE INDEX IF NOT EXISTS idx_project_versions_project_created ON project_versions(project_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_project_context_project_id ON project_context_memories(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_context_chapter_id ON project_context_memories(chapter_id);
+CREATE INDEX IF NOT EXISTS idx_project_context_project_type ON project_context_memories(project_id, memory_type);
+CREATE INDEX IF NOT EXISTS idx_tags_team_name ON tags(team_id, name);
+CREATE INDEX IF NOT EXISTS idx_attachments_project_id ON attachments(project_id);
+CREATE INDEX IF NOT EXISTS idx_attachments_chapter_id ON attachments(chapter_id);
 
+-- Index cho queue/lịch sử sinh AI.
+CREATE INDEX IF NOT EXISTS idx_ai_models_provider_active ON ai_models(provider_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_prompt_templates_owner ON prompt_templates(owner_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_templates_team ON prompt_templates(team_id);
 CREATE INDEX IF NOT EXISTS idx_generation_requests_project_id ON generation_requests(project_id);
 CREATE INDEX IF NOT EXISTS idx_generation_requests_status ON generation_requests(status);
 CREATE INDEX IF NOT EXISTS idx_generation_requests_requested_at ON generation_requests(requested_at DESC);
 CREATE INDEX IF NOT EXISTS idx_generation_requests_requested_by ON generation_requests(requested_by);
+CREATE INDEX IF NOT EXISTS idx_generation_requests_queue ON generation_requests(status, requested_at) WHERE status IN ('queued', 'running');
+CREATE INDEX IF NOT EXISTS idx_generation_requests_project_history ON generation_requests(project_id, requested_at DESC);
+CREATE INDEX IF NOT EXISTS idx_generation_outputs_created_at ON generation_outputs(created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_attachments_project_id ON attachments(project_id);
+-- Index cho quản trị/audit.
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_user_id ON audit_logs(actor_user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_project_id ON audit_logs(project_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_team_id ON audit_logs(team_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
 
+-- Index JSONB GIN chọn lọc cho field thường lọc/tìm kiếm.
+CREATE INDEX IF NOT EXISTS idx_generation_requests_parameters_gin ON generation_requests USING GIN (parameters);
+CREATE INDEX IF NOT EXISTS idx_generation_outputs_raw_response_gin ON generation_outputs USING GIN (raw_response);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_metadata_gin ON audit_logs USING GIN (metadata);
+
 -- --------------------
--- Triggers: updated_at maintenance
+-- Triggers: duy trì updated_at
 -- --------------------
 DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
 CREATE TRIGGER trg_users_updated_at
@@ -376,9 +469,9 @@ BEFORE UPDATE ON prompt_templates
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- --------------------
--- Canon / Lore domain (from migration 002)
+-- Nhóm Canon / Lore (từ migration 002)
 -- --------------------
--- canon_scope: one scope per project (MVP)
+-- canon_scope: mỗi project một scope (MVP)
 CREATE TABLE IF NOT EXISTS canon_scope (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
@@ -498,10 +591,19 @@ CREATE TABLE IF NOT EXISTS lore_chunk (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ix_lore_chunk_scope_chapter ON lore_chunk(scope_id, chapter_no);
+CREATE INDEX IF NOT EXISTS ix_lore_chunk_scope_source ON lore_chunk(scope_id, source, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_lore_chunk_entities_gin ON lore_chunk USING GIN (entity_ids);
 
--- Optional ANN index (uncomment after meaningful row count + ANALYZE):
--- CREATE INDEX IF NOT EXISTS ix_lore_chunk_emb_ivfflat ON lore_chunk
---   USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- Đường dẫn vector search tùy chọn:
+-- 1) Cài pgvector riêng khi môi trường deploy hỗ trợ:
+--    CREATE EXTENSION IF NOT EXISTS vector;
+-- 2) Chọn kích thước embedding cố định cho model embedding đã chọn.
+-- 3) Trong migration riêng, thêm/chuyển cột vector, backfill dữ liệu, ANALYZE,
+--    rồi tạo ANN index ngoài transaction cho bảng lớn đã có dữ liệu.
+-- Chỉ là ví dụ, dimension phải khớp model embedding:
+-- ALTER TABLE lore_chunk ADD COLUMN embedding_vec vector(1536);
+-- CREATE INDEX CONCURRENTLY ix_lore_chunk_embedding_vec_ivfflat ON lore_chunk
+--   USING ivfflat (embedding_vec vector_cosine_ops) WITH (lists = 100);
 
 -- --------------------
 -- Visual bible & assets
@@ -526,5 +628,25 @@ CREATE TABLE IF NOT EXISTS lore_asset (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS ix_lore_asset_scope ON lore_asset(scope_id);
+CREATE INDEX IF NOT EXISTS ix_lore_asset_scope_kind ON lore_asset(scope_id, kind);
+CREATE INDEX IF NOT EXISTS ix_lore_asset_meta_gin ON lore_asset USING GIN (meta_json);
+
+-- Index tra cứu canon/lore và JSONB đặt gần domain để dễ đọc.
+CREATE INDEX IF NOT EXISTS ix_canon_event_scope_t_desc ON canon_event(scope_id, t_index DESC);
+CREATE INDEX IF NOT EXISTS ix_canon_event_scope_chapter_scene ON canon_event(scope_id, chapter_no, scene_no);
+CREATE INDEX IF NOT EXISTS ix_canon_event_payload_gin ON canon_event USING GIN (payload_json);
+CREATE INDEX IF NOT EXISTS ix_canon_character_personality_gin ON canon_character USING GIN (personality_json);
+CREATE INDEX IF NOT EXISTS ix_character_visual_variant_face_marks_gin ON character_visual_variant USING GIN (face_marks_json);
+CREATE INDEX IF NOT EXISTS ix_character_visual_variant_ref_assets_gin ON character_visual_variant USING GIN (ref_asset_ids);
+CREATE INDEX IF NOT EXISTS ix_creature_instance_condition_gin ON creature_instance USING GIN (condition_json);
+CREATE INDEX IF NOT EXISTS ix_canon_location_env_tags_gin ON canon_location USING GIN (env_style_tags);
+CREATE INDEX IF NOT EXISTS ix_relationship_edge_from ON relationship_edge(scope_id, from_character_id);
+CREATE INDEX IF NOT EXISTS ix_relationship_edge_to ON relationship_edge(scope_id, to_character_id);
+CREATE INDEX IF NOT EXISTS ix_relationship_edge_payload_gin ON relationship_edge USING GIN (payload_json);
+CREATE INDEX IF NOT EXISTS ix_world_state_value_gin ON world_state_kv USING GIN (value_json);
+CREATE INDEX IF NOT EXISTS ix_visual_bible_style_pack_gin ON visual_bible USING GIN (style_pack_json);
+CREATE INDEX IF NOT EXISTS ix_visual_bible_palette_gin ON visual_bible USING GIN (palette_json);
+CREATE INDEX IF NOT EXISTS ix_visual_bible_creature_rules_gin ON visual_bible USING GIN (creature_rules_json);
+CREATE INDEX IF NOT EXISTS ix_visual_bible_cinematic_rules_gin ON visual_bible USING GIN (cinematic_rules_json);
 
 COMMIT;

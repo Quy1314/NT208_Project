@@ -7,13 +7,13 @@ import uuid
 
 def test():
     db = SessionLocal()
-    # get a user
+    # Lấy một user mẫu.
     user = db.query(models.User).first()
     if not user:
         print("No user found")
         return
     
-    # Try querying with string id
+    # Thử query bằng id dạng chuỗi.
     user_id_str = str(user.id)
     print(f"User ID string: {user_id_str}")
     
