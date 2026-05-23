@@ -16,7 +16,7 @@
     position: fixed;
     left: var(--gravity-x);
     top: var(--gravity-y);
-    z-index: 2;
+    z-index: 0;
     width: 520px;
     height: 520px;
     pointer-events: none;
@@ -29,7 +29,7 @@
       radial-gradient(circle at 52% 54%, rgba(14, 165, 233, 0.36) 0 42%, transparent 72%);
 
     filter: blur(26px) saturate(180%);
-    opacity: 0.4;
+    opacity: 0.32;
     mix-blend-mode: screen;
     transform: translate3d(-50%, -50%, 0) scale(1);
     animation: gravity-pulse 4.6s ease-in-out infinite;
@@ -60,17 +60,15 @@
 
   .gravity-card {
     position: relative;
-    transform-style: preserve-3d;
     transform:
       perspective(1200px)
-      rotateX(calc((0.5 - var(--gravity-y-ratio)) * 10deg))
-      rotateY(calc((var(--gravity-x-ratio) - 0.5) * 12deg))
-      translate3d(
+      rotateX(calc((0.5 - var(--gravity-y-ratio)) * 4deg))
+      rotateY(calc((var(--gravity-x-ratio) - 0.5) * 5deg))
+      translate(
         calc((var(--gravity-x-ratio) - 0.5) * 10px),
-        calc((var(--gravity-y-ratio) - 0.5) * 10px),
-        0
+        calc((var(--gravity-y-ratio) - 0.5) * 10px)
       );
-    transition: box-shadow 220ms ease, filter 220ms ease;
+    transition: box-shadow 220ms ease;
     will-change: transform;
   }
 
@@ -83,22 +81,20 @@
     border-radius: inherit;
     background: radial-gradient(
       circle at calc(var(--gravity-x-ratio) * 100%) calc(var(--gravity-y-ratio) * 100%),
-      rgba(255, 255, 255, 0.26),
-      rgba(34, 211, 238, 0.12) 28%,
+      rgba(255, 255, 255, 0.18),
+      rgba(34, 211, 238, 0.08) 28%,
       transparent 62%
     );
-    opacity: 0.95;
+    opacity: 0.85;
   }
 
   .gravity-card > * {
     position: relative;
     z-index: 1;
-    transform: translateZ(16px);
   }
 
   .gravity-card:hover {
     box-shadow: 0 26px 80px rgba(34, 211, 238, 0.20), 0 14px 38px rgba(15, 23, 42, 0.28);
-    filter: saturate(1.1);
   }
 
   @keyframes gravity-pulse {
