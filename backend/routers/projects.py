@@ -151,7 +151,13 @@ def generate_image_content(
         return f"data:image/png;base64,{b64}"
     except Exception as e:
         print(f"Lỗi text-to-image Hugging Face: {e}")
-        return f"Không tạo được ảnh qua Hugging Face Inference. Chi tiết: {str(e)}"
+        error_text = str(e)
+        if "402" in error_text or "payment required" in error_text.lower() or "depleted your monthly included credits" in error_text.lower():
+            return (
+                "Không tạo được ảnh vì Hugging Face Inference Provider đã hết credits tháng này. "
+                "Bạn có thể thêm credits/nâng cấp PRO trên Hugging Face, hoặc vào Personalize để dùng một HF token khác còn quota."
+            )
+        return f"Không tạo được ảnh qua Hugging Face Inference. Chi tiết: {error_text}"
 
 
 def generate_story_content(
@@ -696,15 +702,22 @@ def create_project(
             )
             stored_bytes, ext = to_mp3_if_possible(audio_bytes)
             audio_filename = f"audio_{new_project.id}_{int(time.time() * 1000)}.{ext}"
-            upload_dir = get_audio_upload_dir()
-            os.makedirs(upload_dir, exist_ok=True)
             audio_path = os.path.join(upload_dir, audio_filename)
             with open(audio_path, "wb") as f:
                 f.write(stored_bytes)
+                
+            audio_web_path = f"/uploads/audio/{audio_filename}"
+            new_project_obj = cast(Any, new_project)
+            new_project_obj.content = f"{new_project_obj.content}\n\n---\n\n{audio_web_path}"
+            
+            entry = db.query(models.ProjectContextEntry).filter(models.ProjectContextEntry.project_id == pid).order_by(models.ProjectContextEntry.created_at.desc()).first()
+            if entry:
+                entry.generated_content = new_project_obj.content
+
             audio_file = models.AudioFile(
                 project_id=new_project.id,
                 title=f"Audio for {new_project.title}",
-                audio_url=audio_path,
+                audio_url=audio_web_path,
             )
             db.add(audio_file)
             db.commit()
@@ -750,6 +763,7 @@ def continue_project(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
     x_hf_api_key: str | None = Header(None, alias="X-HF-Api-Key"),
+    x_fpt_api_key: str | None = Header(None, alias="X-FPT-Api-Key"),
 ):
     pid = _project_uuid(project_id)
     project = db.query(models.Project).filter(models.Project.id == pid).first()
@@ -759,13 +773,44 @@ def continue_project(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập Project này.")
 
     recent_context = _build_recent_context(db, pid)
+    audio_models = [FPT_TTS_MODEL]
+    is_audio_model = data.model_name and data.model_name in audio_models
     is_image_model = bool(data.model_name and data.model_name in HF_IMAGE_MODELS)
 
     project_obj = cast(Any, project)
     project_content = str(project_obj.content or "")
     project_title = str(project_obj.title)
 
-    if is_image_model:
+    if is_audio_model:
+        new_chunk_text = _extract_tts_text(data.prompt)
+        new_chunk = new_chunk_text
+        try:
+            audio_bytes = generate_audio_from_text(
+                new_chunk_text,
+                data.language,
+                fpt_api_key=x_fpt_api_key,
+            )
+            stored_bytes, ext = to_mp3_if_possible(audio_bytes)
+            audio_filename = f"audio_{pid}_{int(time.time() * 1000)}.{ext}"
+            upload_dir = get_audio_upload_dir()
+            os.makedirs(upload_dir, exist_ok=True)
+            audio_path = os.path.join(upload_dir, audio_filename)
+            with open(audio_path, "wb") as f:
+                f.write(stored_bytes)
+                
+            audio_web_path = f"/uploads/audio/{audio_filename}"
+            new_chunk = f"{new_chunk_text}\n\n---\n\n{audio_web_path}"
+
+            audio_file = models.AudioFile(
+                project_id=pid,
+                title=f"Audio for {project_title}",
+                audio_url=audio_web_path,
+            )
+            db.add(audio_file)
+        except Exception as audio_err:
+            print(f"[WARN] TTS auto-generation failed for project {pid}: {audio_err}")
+
+    elif is_image_model:
         ensure_canon_scope(db, pid)
         mid = (data.model_name or "").strip() or "runwayml/stable-diffusion-v1-5"
         if canon_engine_enabled() and project_has_canon_characters(db, pid):
@@ -801,11 +846,12 @@ def continue_project(
                 print(f"[WARN] lore chunk append failed: {chunk_err}")
 
     project_obj = cast(Any, project)
-    project_obj.prompt = data.prompt
+    user_prompt_chunk = f"[[USER_PROMPT]]\n{data.prompt.strip()}"
+    continuation_chunk = f"{user_prompt_chunk}\n\n---\n\n{new_chunk}"
     if project_content and project_content.strip():
-        project_obj.content = f"{project_content.rstrip()}\n\n---\n\n{new_chunk}"
+        project_obj.content = f"{project_content.rstrip()}\n\n---\n\n{continuation_chunk}"
     else:
-        project_obj.content = new_chunk
+        project_obj.content = continuation_chunk
 
     db.commit()
     db.refresh(project)

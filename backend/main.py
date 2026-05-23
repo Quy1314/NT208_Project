@@ -15,20 +15,22 @@ from database import engine, Base
 import models
 import lore.db_models  # noqa: F401 — registers canonical lore ORM tables on Base.metadata
 import auth
-from routers import projects, teams, audio, canon, video
+from routers import projects, teams, audio, canon, video, prompt_templates
 
 
 # Tạo sẵn toàn bộ bảng trong database nếu chưa tồn tại
 Base.metadata.create_all(bind=engine)
 
-# Tạo folder outputs nếu cần lưu file video local
+# Tạo folder outputs và uploads
 os.makedirs("outputs", exist_ok=True)
+os.makedirs("uploads/audio", exist_ok=True)
 
 # Khởi tạo application FastAPI chính
 app = FastAPI()
 
-# Mount folder outputs để frontend có thể truy cập file tĩnh nếu cần
+# Mount folder outputs và uploads để frontend có thể truy cập file tĩnh nếu cần
 app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Cấu hình CORS Middleware: Cho phép Frontend gọi API qua Backend
 app.add_middleware(
@@ -104,6 +106,7 @@ app.include_router(canon.router)
 app.include_router(teams.router)
 app.include_router(audio.router)
 app.include_router(video.router)
+app.include_router(prompt_templates.router)
 
 
 @app.get("/")

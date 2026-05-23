@@ -24,16 +24,23 @@ export const audioModelOptions: string[] = [
   "fpt-ai-tts-v5",
 ];
 
+export const videoModelOptions: string[] = [
+  "fal-video",
+  "kling-video",
+];
+
 export const hfModelGroups: { label: string; models: string[] }[] = [
   { label: "Văn bản (LLM)", models: hfTextModelOptions },
   { label: "Ảnh (Hugging Face Inference)", models: hfImageModelOptions },
   { label: "Audio (FPT AI TTS)", models: audioModelOptions },
+  { label: "Video", models: videoModelOptions },
 ];
 
 export const allHfModelIds: string[] = [
   ...hfTextModelOptions,
   ...hfImageModelOptions,
   ...audioModelOptions,
+  ...videoModelOptions,
 ];
 
 export function isImageModelId(modelId: string): boolean {
@@ -42,4 +49,8 @@ export function isImageModelId(modelId: string): boolean {
 
 export function isAudioModelId(modelId: string): boolean {
   return audioModelOptions.includes(modelId);
+}
+
+export function isVideoModelId(modelId: string): boolean {
+  return videoModelOptions.includes(modelId);
 }

@@ -1,4 +1,4 @@
-"use client"; // Lệnh này báo cho Next.js biết đây là một Client Component (chạy trên trình duyệt, có State và Effect)
+"use client";
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
@@ -7,25 +7,29 @@ import AuthShell from "@/components/auth/auth_shell";
 import { API_BASE_URL } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function RegisterPage() {
-    const router = useRouter(); // Dùng để chuyển hướng trang bằng code (redirect)
+    const router = useRouter();
     const [isDark, setIsDark] = useState(true);
 
-    // Khởi tạo các State cục bộ để lưu trữ dữ liệu form và trạng thái
+    // Local form states
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
     const [isCheckingUser, setIsCheckingUser] = useState(false);
     const [userExists, setUserExists] = useState<boolean | null>(null);
 
+    // Sync theme
     useEffect(() => {
         const savedTheme = localStorage.getItem("theme");
         if (savedTheme === "light") setIsDark(false);
         if (savedTheme === "dark") setIsDark(true);
     }, []);
 
+    // Check if email already exists on debounce
     useEffect(() => {
         if (!email.trim() || !email.includes("@")) {
             setUserExists(null);
@@ -50,11 +54,11 @@ export default function RegisterPage() {
         return () => clearTimeout(timer);
     }, [email]);
 
-    // Hàm sự kiện chạy khi người dùng bấm nút Submit
+    // Handle signup form submit
     const handleRegister = async (e: React.FormEvent) => {
-        e.preventDefault(); // Chặn hành vi load lại trang mặc định của thẻ <form> HTML
-        setLoading(true); // Bật hiệu ứng loading để ngăn người dùng bấm nhiều lần
-        setError(""); // Xóa lỗi cũ nếu có
+        e.preventDefault();
+        setLoading(true);
+        setError("");
 
         if (userExists) {
             setError("Email này đã được đăng ký.");
@@ -63,29 +67,23 @@ export default function RegisterPage() {
         }
 
         try {
-            // Gửi HTTP POST request sang Backend API
             const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password }), // Gói email/pass vào JSON
+                body: JSON.stringify({ email, password }),
             });
 
-            // Chờ Backend phản hồi (parse sang Json)
             const data = await res.json();
 
-            // res.ok = true nếu HTTP status từ 200 -> 299, ngược lại nếu 400, 401, 500 thì nhảy vào if này
             if (!res.ok) {
-                // Quăng lỗi ra ngoài block catch để hiển thị lên màn hình (ưu tiên lấy 'detail' gửi từ backend)
                 throw new Error(data.detail || "Registration failed");
             }
 
-            // Nếu API đăng ký thành công, lập tức chuyển hướng sang trang /login
             router.push("/login");
         } catch (err: unknown) {
-            // Bắt và lưu lại báo lỗi từ backend để hiện ra trên UI
             setError(err instanceof Error ? err.message : "Registration failed");
         } finally {
-            setLoading(false); // Dù lỗi hay ko thì cũng mở khóa nút lại
+            setLoading(false);
         }
     };
 
@@ -97,38 +95,98 @@ export default function RegisterPage() {
             author="AI Generator Team"
             role="Creative Platform"
         >
-            <form onSubmit={handleRegister} className="space-y-5">
-                {error && <div className={`rounded-lg border p-3 text-sm ${isDark ? "border-red-500/40 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>{error}</div>}
-                <div>
-                    <label className={`mb-1.5 block text-xs uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-600"}`} htmlFor="email">Email</label>
-                    <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                        className={`h-11 px-4 py-3 text-sm ${
+            <form onSubmit={handleRegister} className="space-y-6" autoComplete="off">
+                {error && (
+                    <div className={`rounded-xl border p-3.5 text-sm transition-all duration-200 animate-shake ${
+                        isDark 
+                            ? "border-red-500/30 bg-red-500/10 text-red-300" 
+                            : "border-red-200 bg-red-50 text-red-700"
+                    }`}>
+                        {error}
+                    </div>
+                )}
+                
+                {/* Email input field */}
+                <div className="space-y-2">
+                    <label className={`block text-xs font-semibold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`} htmlFor="email">
+                        Email
+                    </label>
+                    <Input
+                        id="email"
+                        type="email"
+                        required
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className={`h-11 px-4 py-3 text-sm rounded-xl transition-all duration-200 ${
                             isDark
-                              ? "border-slate-700 bg-slate-950 text-white placeholder-slate-500"
-                              : "border-slate-300 bg-white text-slate-900 placeholder-slate-400"
+                              ? "border-white/10 bg-slate-950/40 text-white placeholder-slate-500 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/10"
+                              : "border-slate-200 bg-slate-50/50 text-slate-900 placeholder-slate-400 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/10"
                         }`}
-                        placeholder="you@gmail.com" />
-                    {isCheckingUser && <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-600"}`}>Đang kiểm tra tài khoản...</p>}
-                    {!isCheckingUser && userExists === true && <p className="mt-1 text-xs text-red-400">Email đã tồn tại.</p>}
-                    {!isCheckingUser && userExists === false && email.includes("@") && <p className="mt-1 text-xs text-emerald-400">Email có thể sử dụng.</p>}
+                        placeholder="you@gmail.com"
+                        autoComplete="off"
+                    />
+                    {isCheckingUser && (
+                        <p className={`text-xs animate-pulse ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                            Đang kiểm tra tài khoản...
+                        </p>
+                    )}
+                    {!isCheckingUser && userExists === true && (
+                        <p className="text-xs text-red-400 font-medium">Email đã được đăng ký trước đó.</p>
+                    )}
+                    {!isCheckingUser && userExists === false && email.includes("@") && (
+                        <p className="text-xs text-emerald-400 font-medium">Email khả dụng để sử dụng.</p>
+                    )}
                 </div>
-                <div>
-                    <label className={`mb-1.5 block text-xs uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-600"}`} htmlFor="password">Password</label>
-                    <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-                        className={`h-11 px-4 py-3 text-sm ${
-                            isDark
-                              ? "border-slate-700 bg-slate-950 text-white placeholder-slate-500"
-                              : "border-slate-300 bg-white text-slate-900 placeholder-slate-400"
-                        }`}
-                        placeholder="Tối thiểu 8 ký tự" />
+
+                {/* Password input field */}
+                <div className="space-y-2">
+                    <label className={`block text-xs font-semibold uppercase tracking-widest ${isDark ? "text-slate-400" : "text-slate-500"}`} htmlFor="password">
+                        Mật khẩu
+                    </label>
+                    <div className="relative">
+                        <Input
+                            id="password"
+                            type={showPassword ? "text" : "password"}
+                            required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className={`h-11 pl-4 pr-10 py-3 text-sm rounded-xl transition-all duration-200 ${
+                                isDark
+                                  ? "border-white/10 bg-slate-950/40 text-white placeholder-slate-500 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/10"
+                                  : "border-slate-200 bg-slate-50/50 text-slate-900 placeholder-slate-400 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/10"
+                            }`}
+                            placeholder="Tối thiểu 8 ký tự"
+                            autoComplete="new-password"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors focus:outline-none"
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                    </div>
                 </div>
-                <Button type="submit" disabled={loading}
-                    className="h-11 w-full bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">
+
+                {/* Submit Sign-up Button */}
+                <Button 
+                    type="submit" 
+                    disabled={loading}
+                    className="h-11 w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl shadow-lg shadow-blue-600/20 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.98] transition-all duration-200 cursor-pointer"
+                >
                     {loading ? "Creating account..." : "Sign up"}
                 </Button>
             </form>
-            <p className={`mt-6 text-center text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
-                Đã có tài khoản? <Link href="/login" className="font-semibold text-blue-400 hover:text-blue-300">Đăng nhập</Link>
+
+            <p className={`mt-6 text-center text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                Đã có tài khoản?{" "}
+                <Link 
+                    href="/login" 
+                    className="font-semibold text-blue-400 hover:text-blue-300 transition-colors duration-150"
+                >
+                    Đăng nhập
+                </Link>
             </p>
         </AuthShell>
     );

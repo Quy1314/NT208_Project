@@ -4,6 +4,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 import uuid
+from datetime import datetime
 
 class User(Base):
     __tablename__ = "users"
@@ -93,6 +94,21 @@ class AudioJob(Base):
     result_path = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class PromptTemplate(Base):
+    __tablename__ = "prompt_templates"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    team_id = Column(UUID(as_uuid=True), ForeignKey("team_workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
+    name = Column(String(120), nullable=False)
+    content_type = Column(String(30), nullable=False, default="novel", server_default="novel")
+    template_text = Column(Text, nullable=False)
+    is_public = Column(Boolean, nullable=False, default=False, server_default="false")
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
 
 # ==========================================
 # SCHEMA PYDANTIC cho validate dữ liệu.
@@ -195,3 +211,35 @@ class AudioJobStatusResp(BaseModel):
     audio_url: str | None = None
     error: str | None = None
     created_at: str
+
+
+# Pydantic schemas for Prompt Templates
+class PromptTemplateCreate(BaseModel):
+    name: str
+    template_text: str
+    content_type: Literal["novel", "comic_script", "video_script", "lyrics", "other"] = "novel"
+    is_public: bool = False
+    team_id: str | None = None
+
+
+class PromptTemplateUpdate(BaseModel):
+    name: str | None = None
+    template_text: str | None = None
+    content_type: Literal["novel", "comic_script", "video_script", "lyrics", "other"] | None = None
+    is_public: bool | None = None
+    team_id: str | None = None
+
+
+class PromptTemplateResponse(BaseModel):
+    id: uuid.UUID
+    owner_id: uuid.UUID | None
+    team_id: uuid.UUID | None
+    name: str
+    content_type: str
+    template_text: str
+    is_public: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

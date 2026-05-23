@@ -54,6 +54,12 @@ Dependencies được khai báo trong `requirements.txt` (thư mục gốc), kh�
 
 `pyrefly.toml` chỉ cấu hình `search-path = ["backend"]`; không pin interpreter theo đường dẫn local. Nếu IDE/Pyrefly vẫn báo thiếu module sau khi cài dependencies, chọn đúng Python interpreter trong IDE rồi restart language server hoặc reload VS Code/Antigravity.
 
+> **Yêu cầu hệ thống — FFmpeg:** `pydub` (dùng trong audio pipeline) cần ffmpeg. Nếu chưa cài:
+> ```powershell
+> winget install Gyan.FFmpeg --accept-package-agreements --accept-source-agreements
+> ```
+> Sau đó **restart terminal** để PATH cập nhật.
+
 ### 3.2 Biến môi trường (`backend/.env`)
 
 Tạo file `backend/.env` (không commit; đã nằm trong `.gitignore`). Các biến thường dùng:
@@ -71,6 +77,9 @@ Tạo file `backend/.env` (không commit; đã nằm trong `.gitignore`). Các b
 | `FRONTEND_BASE_URL` | URL frontend dùng trong link reset mật khẩu, ví dụ `http://127.0.0.1:3000` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | Gửi email quên mật khẩu (Gmail dùng App Password) |
 | `SMTP_SENDER_NAME` | Tên hiển thị người gửi (tùy chọn) |
+| `FPT_API_KEY` | API key FPT AI TTS (tạo audio) |
+| `KLING_ACCESS_KEY` | Kling AI Access Key (tạo video; lấy từ kling.ai/dev/api-key) |
+| `KLING_SECRET_KEY` | Kling AI Secret Key — copy ngay khi tạo, không xem lại được |
 
 ### 3.3 Chạy server
 

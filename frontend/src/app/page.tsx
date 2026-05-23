@@ -18,6 +18,7 @@ import {
   hfModelGroups,
   isAudioModelId,
   isImageModelId,
+  isVideoModelId,
 } from "@/lib/hf_models";
 import ProjectSidebar from "@/components/workspace/project_sidebar";
 import ProjectStage from "@/components/workspace/project_stage";
@@ -60,8 +61,6 @@ interface TeamWorkspace {
   name: string;
 }
 
-type ChatMode = "text" | "video";
-
 interface VideoChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -81,7 +80,7 @@ function buildVideoGenerateRequestBody(
   isCreating: boolean,
   draftTitle: string,
   videoMessages: VideoChatMessage[]
-): { prompt: string; project_id?: string; context?: string; project_title?: string } {
+): { prompt: string; project_id?: string; context?: string; project_title?: string; provider: string } {
   const parts: string[] = [];
 
   if (selectedProject) {
@@ -116,8 +115,9 @@ function buildVideoGenerateRequestBody(
     selectedProject?.title?.trim() || (isCreating ? draftTitle.trim() : "") || undefined;
   const project_id = selectedProject?.id;
 
-  const payload: { prompt: string; project_id?: string; context?: string; project_title?: string } = {
+  const payload: { prompt: string; project_id?: string; context?: string; project_title?: string; provider: string } = {
     prompt,
+    provider: "fal",   // default; caller will override
   };
   if (project_id) payload.project_id = project_id;
   if (project_title) payload.project_title = project_title;
@@ -127,7 +127,6 @@ function buildVideoGenerateRequestBody(
 
 type WorkspaceComposerDockProps = {
   isVisible: boolean;
-  isMainAtBottom: boolean;
   selectedProject: Project | null;
   prompt: string;
   continuePrompt: string;
@@ -146,15 +145,14 @@ type WorkspaceComposerDockProps = {
   isGenerating: boolean;
   isContinuing: boolean;
   isGeneratingVideo: boolean;
-  chatMode: ChatMode;
-  setChatMode: (m: ChatMode) => void;
+  isVideoModel: boolean;
   onSubmit: () => void;
   personalHfKeyActive: boolean;
+  isDark: boolean;
 };
 
 function WorkspaceComposerDock({
   isVisible,
-  isMainAtBottom,
   selectedProject,
   prompt,
   continuePrompt,
@@ -173,14 +171,14 @@ function WorkspaceComposerDock({
   isGenerating,
   isContinuing,
   isGeneratingVideo,
-  chatMode,
-  setChatMode,
+  isVideoModel,
   onSubmit,
   personalHfKeyActive,
+  isDark,
 }: WorkspaceComposerDockProps) {
   if (!isVisible) return null;
 
-  const isVideo = chatMode === "video";
+  const isVideo = isVideoModel;
   const isBusy = isVideo ? isGeneratingVideo : selectedProject ? isContinuing : isGenerating;
   const safeModel = allModelIds.includes(modelName) ? modelName : allModelIds[0];
 
@@ -227,14 +225,12 @@ function WorkspaceComposerDock({
           : "Đang tạo nội dung...";
 
   return (
-    <div
-      className={`absolute bottom-6 left-1/2 z-30 w-[95%] max-w-4xl -translate-x-1/2 sm:w-[85%] transition-all duration-300 ease-out ${
-        isMainAtBottom
-          ? "pointer-events-auto translate-y-0 opacity-100"
-          : "pointer-events-none translate-y-8 opacity-0"
-      }`}
-    >
-      <div className="bg-[#1b1c20] border border-[#2a2c31] shadow-[0_10px_40px_rgba(0,0,0,0.5)] rounded-3xl p-3 flex flex-col gap-2 transition-all">
+    <div className="flex-none w-full max-w-4xl mx-auto px-2 sm:px-0 pb-6 pt-2 z-30">
+      <div className={`p-3 flex flex-col gap-2 rounded-3xl transition-all border shadow-lg ${
+        isDark 
+          ? "bg-slate-900/40 backdrop-blur-xl border-white/10 text-white shadow-black/45" 
+          : "bg-white border-slate-200 shadow-slate-200/50"
+      }`}>
         <Textarea
           value={selectedProject ? continuePrompt : prompt}
           onChange={(e) => (selectedProject ? setContinuePrompt(e.target.value) : setPrompt(e.target.value))}
@@ -242,13 +238,19 @@ function WorkspaceComposerDock({
           className="w-full max-h-32 min-h-[60px] p-3 text-[#f3f4f6] border-0 shadow-none focus-visible:ring-0 resize-none placeholder-[#6b7280] bg-transparent font-medium"
         />
 
-        <div className="flex items-center justify-between pt-1 px-2 border-t border-[#2a2c31]/50 mt-1">
+        <div className={`flex items-center justify-between pt-2 px-2 border-t mt-1 ${
+          isDark ? "border-white/10" : "border-slate-200/50"
+        }`}>
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <select
               value={safeModel}
               onChange={(e) => setModelName(e.target.value)}
               title="Model Hugging Face (LLM hoặc text-to-image)"
-              className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg max-w-[min(100%,20rem)] font-mono truncate"
+              className={`text-xs font-semibold px-3 py-1.5 rounded-lg max-w-[min(100%,20rem)] font-mono truncate border focus:outline-none ${
+                isDark 
+                  ? "bg-slate-950/40 border-white/10 text-white" 
+                  : "bg-slate-50 border-slate-200 text-slate-700"
+              }`}
             >
               {modelGroups.map((g) => (
                 <optgroup key={g.label} label={g.label}>
@@ -264,7 +266,11 @@ function WorkspaceComposerDock({
               <select
                 value={creativity}
                 onChange={(e) => setCreativity(e.target.value)}
-                className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg"
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg border focus:outline-none ${
+                  isDark
+                    ? "bg-slate-950/40 border-white/10 text-white"
+                    : "bg-slate-50 border-slate-200 text-slate-700"
+                }`}
               >
                 <option>Focused</option>
                 <option>Balanced</option>
@@ -274,7 +280,11 @@ function WorkspaceComposerDock({
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value as "vietnamese" | "english")}
-              className="text-xs font-semibold text-[#d4d4d8] bg-[#2a2c31] border border-[#3f3f46] px-3 py-1.5 rounded-lg"
+              className={`text-xs font-semibold px-3 py-1.5 rounded-lg border focus:outline-none ${
+                isDark
+                  ? "bg-slate-950/40 border-white/10 text-white"
+                  : "bg-slate-50 border-slate-200 text-slate-700"
+              }`}
             >
               <option value="vietnamese">vietnamese</option>
               <option value="english">english</option>
@@ -282,44 +292,24 @@ function WorkspaceComposerDock({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            <div className="flex rounded-lg border border-[#3f3f46] overflow-hidden text-xs font-semibold shrink-0">
-              <button
-                type="button"
-                onClick={() => setChatMode("text")}
-                className={`px-3 py-1.5 transition-colors ${
-                  chatMode === "text"
-                    ? "bg-indigo-600 text-white"
-                    : "bg-[#2a2c31] text-[#a1a1aa] hover:text-white"
-                }`}
-              >
-                Văn bản
-              </button>
-              <button
-                type="button"
-                onClick={() => setChatMode("video")}
-                className={`px-3 py-1.5 transition-colors border-l border-[#3f3f46] ${
-                  chatMode === "video"
-                    ? "bg-indigo-600 text-white"
-                    : "bg-[#2a2c31] text-[#a1a1aa] hover:text-white"
-                }`}
-              >
-                Video
-              </button>
-            </div>
-            <Button variant="ghost" size="sm" className="text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31]">
+            <Button variant="ghost" size="sm" className={`text-[#a1a1aa] hover:text-white ${
+              isDark ? "hover:bg-white/5" : "hover:bg-slate-200"
+            }`}>
               <Paperclip size={14} /> Đính kèm
             </Button>
-            <Button variant="ghost" size="sm" className="text-[#a1a1aa] hover:text-white hover:bg-[#2a2c31]">
+            <Button variant="ghost" size="sm" className={`text-[#a1a1aa] hover:text-white ${
+              isDark ? "hover:bg-white/5" : "hover:bg-slate-200"
+            }`}>
               <Mic size={14} /> Giọng nói
             </Button>
 
             <Button
               onClick={onSubmit}
               disabled={isBusy}
-              className={`ml-2 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all shadow-md ${
+              className={`ml-2 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all shadow-md cursor-pointer ${
                 isBusy
                   ? "bg-indigo-500/50 cursor-not-allowed"
-                  : "bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 hover:shadow-lg"
+                  : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 hover:shadow-lg"
               }`}
             >
               {isBusy ? (
@@ -367,6 +357,7 @@ export default function DashboardPage() {
   const [modelName, setModelName] = useState("Qwen/Qwen2.5-72B-Instruct");
   const isImageModel = isImageModelId(modelName);
   const isAudioModel = isAudioModelId(modelName);
+  const isVideoModel = isVideoModelId(modelName);
   const [creativity, setCreativity] = useState("Balanced");
   const [language, setLanguage] = useState<"vietnamese" | "english">("vietnamese");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -392,7 +383,6 @@ export default function DashboardPage() {
   const [personalizeMessage, setPersonalizeMessage] = useState("");
   const [personalHfKeyActive, setPersonalHfKeyActive] = useState(false);
 
-  const [chatMode, setChatMode] = useState<ChatMode>("text");
   const [videoMessages, setVideoMessages] = useState<VideoChatMessage[]>([]);
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
 
@@ -454,6 +444,40 @@ export default function DashboardPage() {
   useEffect(() => {
     setPersonalHfKeyActive(Boolean(getPersonalHfApiKey()));
   }, []);
+
+  // Mouse tracking logic for premium gravity parallax and ambient glow
+  useEffect(() => {
+    if (!isDark) return;
+    const root = document.documentElement;
+    const target = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    const current = { ...target };
+    let rafId = 0;
+
+    const animate = () => {
+      current.x += (target.x - current.x) * 0.08;
+      current.y += (target.y - current.y) * 0.08;
+
+      root.style.setProperty("--gravity-x", `${current.x}px`);
+      root.style.setProperty("--gravity-y", `${current.y}px`);
+      root.style.setProperty("--gravity-x-ratio", `${current.x / window.innerWidth}`);
+      root.style.setProperty("--gravity-y-ratio", `${current.y / window.innerHeight}`);
+
+      rafId = requestAnimationFrame(animate);
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      target.x = event.clientX;
+      target.y = event.clientY;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove, { passive: true });
+    rafId = requestAnimationFrame(animate);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      cancelAnimationFrame(rafId);
+    };
+  }, [isDark]);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -864,6 +888,7 @@ export default function DashboardPage() {
         title,
         videoMessages
       );
+      videoBody.provider = modelName === "kling-video" ? "kling" : "fal";
       const res = await fetch(`${API_BASE_URL}/api/video/generate`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
@@ -920,7 +945,7 @@ export default function DashboardPage() {
   };
 
   const handleBottomSubmit = () => {
-    if (chatMode === "video") {
+    if (isVideoModel) {
       void handleVideoGenerate();
     } else if (selectedProject) {
       void handleContinueProject();
@@ -988,13 +1013,13 @@ export default function DashboardPage() {
     </div>
   );
 
-  const showVideoStage = chatMode === "video" && (isCreating || selectedProject);
+  const showVideoStage = isVideoModel && (isCreating || selectedProject);
 
   return (
-    <div className={`flex h-screen p-2 sm:p-4 font-sans ${isDark ? "bg-slate-950 text-slate-100" : "bg-slate-100 text-slate-900"}`}>
+    <div className={`flex h-screen p-2 sm:p-4 font-sans transition-colors duration-300 ${isDark ? "gravity-surface bg-[#040812] text-slate-100" : "bg-slate-100 text-slate-900"}`}>
       <div
-        className={`flex w-full h-full rounded-[2rem] overflow-hidden shadow-sm ${
-          isDark ? "bg-slate-900 border border-slate-800" : "bg-white border border-slate-200"
+        className={`flex w-full h-full rounded-[2rem] overflow-hidden shadow-sm z-10 relative transition-all duration-300 ${
+          isDark ? "bg-slate-900/40 backdrop-blur-xl border border-white/10 text-white shadow-black/45" : "bg-white border border-slate-200"
         }`}
       >
         <ProjectSidebar
@@ -1027,7 +1052,7 @@ export default function DashboardPage() {
           }}
         />
 
-        <div className={`flex-1 flex flex-col relative ${isDark ? "bg-slate-900" : "bg-white"}`}>
+        <div className={`flex-1 flex flex-col relative transition-all duration-300 ${isDark ? "bg-transparent" : "bg-white"}`}>
           <header className="flex justify-between items-center p-5 lg:px-8">
             <div className="md:hidden flex items-center gap-2 font-bold">
               <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white">
@@ -1138,9 +1163,9 @@ export default function DashboardPage() {
 
           <main
             ref={mainScrollRef}
-            className={`flex-1 overflow-y-auto px-4 ${isCreating || selectedProject ? "pb-40" : "pb-8"}`}
+            className="flex-1 overflow-y-auto px-4 pb-8"
           >
-            {showVideoStage && selectedProject ? (
+            {isVideoModel && selectedProject ? (
               <div className="max-w-3xl mx-auto pt-10 px-4">
                 <div className="mb-6 flex flex-col gap-3 px-4 sm:flex-row sm:items-center sm:justify-between">
                   <h2 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-800"}`}>{selectedProject.title}</h2>
@@ -1183,7 +1208,7 @@ export default function DashboardPage() {
                   </p>
                 )}
               </div>
-            ) : showVideoStage && isCreating ? (
+            ) : isVideoModel && isCreating ? (
               <div className="max-w-3xl mx-auto pt-10 px-4 h-full flex flex-col justify-center">
                 <h2 className={`text-3xl md:text-4xl font-extrabold mb-2 tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>
                   Tạo dự án mới
@@ -1216,7 +1241,6 @@ export default function DashboardPage() {
 
           <WorkspaceComposerDock
             isVisible={Boolean(isCreating || selectedProject)}
-            isMainAtBottom={isMainAtBottom}
             selectedProject={selectedProject}
             prompt={prompt}
             continuePrompt={continuePrompt}
@@ -1235,10 +1259,10 @@ export default function DashboardPage() {
             isGenerating={isGenerating}
             isContinuing={isContinuing}
             isGeneratingVideo={isGeneratingVideo}
-            chatMode={chatMode}
-            setChatMode={setChatMode}
+            isVideoModel={isVideoModel}
             onSubmit={handleBottomSubmit}
             personalHfKeyActive={personalHfKeyActive}
+            isDark={isDark}
           />
 
           {isProfileOpen && (
@@ -1248,7 +1272,9 @@ export default function DashboardPage() {
                 onClick={() => setIsProfileOpen(false)}
               ></div>
 
-              <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-[#1b1c20] shadow-[0_0_40px_rgba(0,0,0,0.2)] z-50 flex flex-col animate-in slide-in-from-right duration-300">
+              <div className={`absolute top-0 right-0 w-full sm:w-[420px] h-full shadow-[0_0_40px_rgba(0,0,0,0.4)] z-50 flex flex-col animate-in slide-in-from-right duration-300 border-l ${
+                isDark ? "bg-slate-900/90 backdrop-blur-xl border-white/10 text-white shadow-black/60" : "bg-white border-slate-200 text-slate-900"
+              }`}>
                 <div className="flex items-center p-6 border-b border-transparent">
                   <button
                     onClick={() => setIsProfileOpen(false)}
@@ -1261,54 +1287,70 @@ export default function DashboardPage() {
                 <div className="px-8 flex-1 flex flex-col gap-6 overflow-y-auto pb-10">
                   <div>
                     <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">ID</label>
-                    <div className="w-full bg-[#2a2c31] rounded-xl px-4 py-3.5 text-[14px] font-medium text-[#f3f4f6]">
+                    <div className={`w-full rounded-xl px-4 py-3.5 text-[14px] font-medium border ${
+                      isDark ? "bg-slate-950/40 border-white/10 text-[#f3f4f6]" : "bg-slate-50 border-slate-200 text-slate-900"
+                    }`}>
                       {userProfile?.id}
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">Tên hiển thị</label>
-                    <div className="w-full bg-[#2a2c31] rounded-xl px-4 py-3.5 text-[14px] font-medium text-[#f3f4f6]">
+                    <div className={`w-full rounded-xl px-4 py-3.5 text-[14px] font-medium border ${
+                      isDark ? "bg-slate-950/40 border-white/10 text-[#f3f4f6]" : "bg-slate-50 border-slate-200 text-slate-900"
+                    }`}>
                       {userProfile?.email.split("@")[0]}
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">Email</label>
-                    <div className="w-full bg-[#2a2c31] rounded-xl px-4 py-3.5 text-[14px] font-medium text-[#f3f4f6]">
+                    <div className={`w-full rounded-xl px-4 py-3.5 text-[14px] font-medium border ${
+                      isDark ? "bg-slate-950/40 border-white/10 text-[#f3f4f6]" : "bg-slate-50 border-slate-200 text-slate-900"
+                    }`}>
                       {userProfile?.email}
                     </div>
                   </div>
 
                   <div>
                     <label className="block text-[13px] font-medium text-[#cdd0d5] mb-2.5">Ngày tạo tài khoản</label>
-                    <div className="w-full bg-[#2a2c31] rounded-xl px-4 py-3.5 text-[14px] font-medium text-[#f3f4f6]">
+                    <div className={`w-full rounded-xl px-4 py-3.5 text-[14px] font-medium border ${
+                      isDark ? "bg-slate-950/40 border-white/10 text-[#f3f4f6]" : "bg-slate-50 border-slate-200 text-slate-900"
+                    }`}>
                       {userProfile?.created_at ? new Date(userProfile.created_at).toLocaleString("vi-VN") : "N/A"}
                     </div>
                   </div>
 
-                  <div className="border-t border-[#32353d] pt-4 mt-2 space-y-3">
+                  <div className={`border-t pt-4 mt-2 space-y-3 ${isDark ? "border-white/10" : "border-slate-200"}`}>
                     <label className="block text-[13px] font-semibold text-[#e5e7eb]">Đổi mật khẩu</label>
                     <input
                       type="password"
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
                       placeholder="Mật khẩu hiện tại"
-                      className="w-full bg-[#2a2c31] rounded-xl px-4 py-3 text-[14px] text-[#f3f4f6] outline-none border border-transparent focus:border-blue-500"
+                      className={`w-full rounded-xl px-4 py-3 text-[14px] outline-none border ${
+                        isDark 
+                          ? "bg-slate-950/40 border-white/10 text-[#f3f4f6] placeholder-slate-500 focus:border-blue-500/50" 
+                          : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-500"
+                      }`}
                     />
                     <input
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Mật khẩu mới (>= 8 ký tự)"
-                      className="w-full bg-[#2a2c31] rounded-xl px-4 py-3 text-[14px] text-[#f3f4f6] outline-none border border-transparent focus:border-blue-500"
+                      className={`w-full rounded-xl px-4 py-3 text-[14px] outline-none border ${
+                        isDark 
+                          ? "bg-slate-950/40 border-white/10 text-[#f3f4f6] placeholder-slate-500 focus:border-blue-500/50" 
+                          : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-500"
+                      }`}
                     />
                     {passwordError && <p className="text-xs text-red-400">{passwordError}</p>}
                     {passwordMessage && <p className="text-xs text-emerald-400">{passwordMessage}</p>}
                     <button
                       onClick={handleChangePassword}
                       disabled={changingPassword}
-                      className="w-full rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-semibold px-4 py-2.5 transition-colors"
+                      className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-60 text-white font-semibold px-4 py-2.5 transition-all shadow-md shadow-blue-600/10 cursor-pointer"
                     >
                       {changingPassword ? "Đang cập nhật..." : "Cập nhật mật khẩu"}
                     </button>
@@ -1324,8 +1366,10 @@ export default function DashboardPage() {
                 className="absolute inset-0 bg-slate-900/20 backdrop-blur-[2px] z-40 animate-in fade-in"
                 onClick={() => setIsPersonalizeOpen(false)}
               />
-              <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-[#1b1c20] shadow-[0_0_40px_rgba(0,0,0,0.2)] z-50 flex flex-col animate-in slide-in-from-right duration-300">
-                <div className="flex items-center justify-between border-b border-[#32353d] px-6 py-4">
+              <div className={`absolute top-0 right-0 w-full sm:w-[420px] h-full shadow-[0_0_40px_rgba(0,0,0,0.4)] z-50 flex flex-col animate-in slide-in-from-right duration-300 border-l ${
+                isDark ? "bg-slate-900/90 backdrop-blur-xl border-white/10 text-white shadow-black/60" : "bg-white border-slate-200 text-slate-900"
+              }`}>
+                <div className={`flex items-center justify-between border-b px-6 py-4 ${isDark ? "border-white/10" : "border-slate-200"}`}>
                   <div>
                     <h3 className="text-white font-semibold">Cá nhân hóa</h3>
                     <p className="text-xs text-[#8c8f99] mt-0.5">Hugging Face Inference API</p>
@@ -1353,7 +1397,11 @@ export default function DashboardPage() {
                       onChange={(e) => setPersonalizeKeyInput(e.target.value)}
                       placeholder="hf_..."
                       autoComplete="off"
-                      className="w-full bg-[#2a2c31] rounded-xl px-4 py-3 text-[14px] text-[#f3f4f6] outline-none border border-transparent focus:border-blue-500 font-mono text-sm"
+                      className={`w-full rounded-xl px-4 py-3 text-[14px] outline-none border font-mono text-sm ${
+                        isDark 
+                          ? "bg-slate-950/40 border-white/10 text-[#f3f4f6] placeholder-slate-500 focus:border-blue-500/50" 
+                          : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-500"
+                      }`}
                     />
                   </div>
                   {personalizeMessage && <p className="text-xs text-emerald-400">{personalizeMessage}</p>}
@@ -1361,14 +1409,16 @@ export default function DashboardPage() {
                     <button
                       type="button"
                       onClick={savePersonalizeKey}
-                      className="w-full rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2.5 transition-colors"
+                      className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold px-4 py-2.5 transition-all shadow-md shadow-blue-600/10 cursor-pointer"
                     >
                       Lưu key (phiên hiện tại)
                     </button>
                     <button
                       type="button"
                       onClick={clearPersonalizeKey}
-                      className="w-full rounded-xl border border-[#3f3f46] text-[#e5e7eb] hover:bg-[#2a2c31] font-semibold px-4 py-2.5 transition-colors"
+                      className={`w-full rounded-xl border font-semibold px-4 py-2.5 transition-colors cursor-pointer ${
+                        isDark ? "border-white/10 text-[#e5e7eb] hover:bg-white/5" : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                      }`}
                     >
                       Xóa key
                     </button>
@@ -1378,13 +1428,15 @@ export default function DashboardPage() {
                     <strong className="text-[#9ca3af]">dropdown trên thanh chat</strong> (danh sách đã cài đặt). Token HF
                     cá nhân chỉ thay key gọi API; không có token thì server dùng key mặc định (nếu có).
                   </p>
-                  <div className="rounded-xl border border-[#32353d] bg-[#111317] p-3">
+                  <div className={`rounded-xl border p-3 ${isDark ? "border-white/10 bg-slate-950/40" : "border-slate-200 bg-slate-50"}`}>
                     <p className="text-[11px] font-semibold text-[#cdd0d5] mb-2">Model ảnh free gợi ý (Hugging Face)</p>
                     <div className="flex flex-wrap gap-1.5">
                       {hfImageModelOptions.map((id) => (
                         <span
                           key={id}
-                          className="rounded-md bg-[#2a2c31] px-2 py-1 text-[10px] font-mono text-[#d1d5db]"
+                          className={`rounded-md px-2 py-1 text-[10px] font-mono ${
+                            isDark ? "bg-white/5 text-[#d1d5db]" : "bg-slate-100 text-slate-700"
+                          }`}
                           title={id}
                         >
                           {id}
@@ -1403,7 +1455,9 @@ export default function DashboardPage() {
                 className="absolute inset-0 bg-slate-900/20 backdrop-blur-[2px] z-40 animate-in fade-in"
                 onClick={() => setIsProjectSettingsOpen(false)}
               />
-              <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-[#1b1c20] shadow-[0_0_40px_rgba(0,0,0,0.2)] z-50 flex flex-col animate-in slide-in-from-right duration-300">
+              <div className={`absolute top-0 right-0 w-full sm:w-[420px] h-full shadow-[0_0_40px_rgba(0,0,0,0.4)] z-50 flex flex-col animate-in slide-in-from-right duration-300 border-l ${
+                isDark ? "bg-slate-900/90 backdrop-blur-xl border-white/10 text-white shadow-black/60" : "bg-white border-slate-200 text-slate-900"
+              }`}>
                 <div className="flex items-center justify-between p-6">
                   <h3 className="text-white font-semibold">Cài đặt dự án</h3>
                   <button onClick={() => setIsProjectSettingsOpen(false)} className="text-[#8c8f99] hover:text-white">
@@ -1411,32 +1465,32 @@ export default function DashboardPage() {
                   </button>
                 </div>
                 <div className="px-6 space-y-4">
-                  <div className="rounded-xl bg-[#2a2c31] p-3">
+                  <div className={`rounded-xl p-3 border ${isDark ? "bg-slate-950/40 border-white/10" : "bg-slate-50 border-slate-200"}`}>
                     <p className="text-xs text-slate-300 mb-1">ID dự án</p>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm text-white break-all">{selectedProject.id}</p>
-                      <button onClick={() => copyText(selectedProject.id)} className="text-xs text-blue-300">
+                      <button onClick={() => copyText(selectedProject.id)} className="text-xs text-blue-300 hover:text-blue-200 transition-colors">
                         Sao chép
                       </button>
                     </div>
                   </div>
-                  <div className="rounded-xl bg-[#2a2c31] p-3">
+                  <div className={`rounded-xl p-3 border ${isDark ? "bg-slate-950/40 border-white/10" : "bg-slate-50 border-slate-200"}`}>
                     <p className="text-xs text-slate-300 mb-1">Team ID</p>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm text-white break-all">{selectedTeamId || "Chưa chọn nhóm"}</p>
                       {selectedTeamId && (
-                        <button onClick={() => copyText(selectedTeamId)} className="text-xs text-blue-300">
+                        <button onClick={() => copyText(selectedTeamId)} className="text-xs text-blue-300 hover:text-blue-200 transition-colors">
                           Sao chép
                         </button>
                       )}
                     </div>
                   </div>
-                  <div className="rounded-xl bg-[#2a2c31] p-3">
+                  <div className={`rounded-xl p-3 border ${isDark ? "bg-slate-950/40 border-white/10" : "bg-slate-50 border-slate-200"}`}>
                     <p className="text-xs text-slate-300 mb-1">Team Token</p>
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm text-white break-all">{teamToken || "Chưa có token (chọn nhóm trước)"}</p>
                       {teamToken && (
-                        <button onClick={() => copyText(teamToken)} className="text-xs text-blue-300">
+                        <button onClick={() => copyText(teamToken)} className="text-xs text-blue-300 hover:text-blue-200 transition-colors">
                           Sao chép
                         </button>
                       )}
@@ -1453,8 +1507,10 @@ export default function DashboardPage() {
                 className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px] z-40 animate-in fade-in"
                 onClick={() => exportingFormat === null && setIsExportPanelOpen(false)}
               />
-              <div className="absolute top-0 right-0 w-full sm:w-[420px] h-full bg-[#1b1c20] shadow-[0_0_40px_rgba(0,0,0,0.2)] z-50 flex flex-col animate-in slide-in-from-right duration-300">
-                <div className="flex items-center justify-between border-b border-[#32353d] px-6 py-4">
+              <div className={`absolute top-0 right-0 w-full sm:w-[420px] h-full shadow-[0_0_40px_rgba(0,0,0,0.4)] z-50 flex flex-col animate-in slide-in-from-right duration-300 border-l ${
+                isDark ? "bg-slate-900/90 backdrop-blur-xl border-white/10 text-white shadow-black/60" : "bg-white border-slate-200 text-slate-900"
+              }`}>
+                <div className={`flex items-center justify-between border-b px-6 py-4 ${isDark ? "border-white/10" : "border-[#32353d]"}`}>
                   <div>
                     <h3 className="text-white font-semibold">Xuất dự án</h3>
                     <p className="text-xs text-[#8c8f99] mt-0.5">Tùy chọn file và dịch nội dung trước khi tải</p>
@@ -1476,7 +1532,11 @@ export default function DashboardPage() {
                       value={exportFormatChoice}
                       onChange={(e) => setExportFormatChoice(e.target.value as "md" | "pdf" | "docx")}
                       disabled={exportingFormat !== null}
-                      className="w-full bg-[#2a2c31] rounded-xl px-4 py-3 text-[14px] text-[#f3f4f6] outline-none border border-transparent focus:border-blue-500"
+                      className={`w-full rounded-xl px-4 py-3 text-[14px] outline-none border focus:outline-none ${
+                        isDark 
+                          ? "bg-slate-950/40 border-white/10 text-white" 
+                          : "bg-slate-50 border-slate-200 text-slate-900"
+                      }`}
                     >
                       <option value="md">Markdown (.md)</option>
                       <option value="docx">Word (.docx)</option>
@@ -1491,7 +1551,11 @@ export default function DashboardPage() {
                       value={exportTranslationMode}
                       onChange={(e) => setExportTranslationMode(e.target.value as TranslationMode)}
                       disabled={exportingFormat !== null}
-                      className="w-full bg-[#2a2c31] rounded-xl px-4 py-3 text-[14px] text-[#f3f4f6] outline-none border border-transparent focus:border-blue-500"
+                      className={`w-full rounded-xl px-4 py-3 text-[14px] outline-none border focus:outline-none ${
+                        isDark 
+                          ? "bg-slate-950/40 border-white/10 text-white" 
+                          : "bg-slate-50 border-slate-200 text-slate-900"
+                      }`}
                     >
                       <option value="none">Không dịch</option>
                       <option value="vi-to-en">Tiếng Việt → Tiếng Anh</option>
@@ -1505,7 +1569,7 @@ export default function DashboardPage() {
                     type="button"
                     onClick={() => handleExportProject(exportFormatChoice, exportTranslationMode)}
                     disabled={exportingFormat !== null}
-                    className="w-full rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2.5 transition-colors disabled:opacity-60"
+                    className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold px-4 py-2.5 transition-all shadow-md shadow-blue-600/10 cursor-pointer disabled:opacity-60"
                   >
                     {exportingFormat !== null ? "Đang xử lý..." : "Bắt đầu xuất file"}
                   </button>

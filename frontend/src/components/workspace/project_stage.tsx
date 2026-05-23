@@ -2,6 +2,7 @@
 
 import { FileDown, Plus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { API_BASE_URL } from "@/lib/api";
 
 type Project = {
   id: string;
@@ -45,15 +46,52 @@ function renderGeneratedContent(content: string, isDark: boolean) {
               src={seg}
               alt=""
               className={`max-h-[min(85vh,920px)] w-auto max-w-full rounded-xl border object-contain shadow-lg ${
-                isDark ? "border-slate-600" : "border-slate-200"
+                isDark ? "border-white/10" : "border-slate-200"
               }`}
             />
           );
         }
+        if (seg.startsWith("/uploads/audio/")) {
+          return (
+            <audio
+              key={i}
+              src={`${API_BASE_URL}${seg}`}
+              controls
+              className="w-full max-w-md mt-4 shadow-sm"
+            />
+          );
+        }
+        if (seg.startsWith("[[USER_PROMPT]]")) {
+          const promptText = seg.replace(/^\[\[USER_PROMPT\]\]\s*/, "").trim();
+          return (
+            <div
+              key={i}
+              className={`p-4 rounded-xl shadow-sm border self-end ml-auto max-w-[85%] transition-all duration-300 ${
+                isDark ? "bg-slate-900/60 backdrop-blur-xl border-white/10 text-white shadow-black/25" : "bg-blue-50 text-blue-900 border-blue-100"
+              }`}
+            >
+              <p className={`font-semibold text-xs mb-1 uppercase tracking-wider ${isDark ? "text-blue-300" : "text-blue-700"}`}>Yêu cầu của bạn</p>
+              <p className="text-sm font-medium whitespace-pre-wrap">{promptText}</p>
+            </div>
+          );
+        }
         return (
-          <p key={i} className="whitespace-pre-wrap leading-relaxed">
-            {seg}
-          </p>
+          <div
+            key={i}
+            className={`p-6 rounded-2xl shadow-sm border w-full max-w-[95%] transition-all duration-300 ${
+              isDark ? "bg-slate-900/40 backdrop-blur-xl border-white/10 text-white shadow-black/25" : "bg-white border-slate-100 text-slate-700"
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center text-white">
+                <Sparkles size={12} />
+              </div>
+              <span className="font-bold text-sm">Nội dung AI đã tạo</span>
+            </div>
+            <p className="whitespace-pre-wrap leading-relaxed">
+              {seg}
+            </p>
+          </div>
         );
       })}
     </div>
@@ -82,7 +120,7 @@ export default function ProjectStage({
                 disabled={exportingFormat !== null}
                 variant="outline"
                 size="sm"
-                className={isDark ? "border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}
+                className={`transition-all ${isDark ? "border-white/10 bg-slate-950/40 text-slate-200 hover:bg-slate-800/60" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
               >
                 <FileDown size={14} />
                 {exportingFormat ? "Đang xuất..." : "Xuất file"}
@@ -92,32 +130,22 @@ export default function ProjectStage({
               onClick={onDeleteSelectedProject}
               variant="destructive"
               size="sm"
-              className={isDark ? "border-red-900/60 bg-red-950/40 text-red-300 hover:bg-red-950/70" : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"}
+              className={`transition-all ${isDark ? "border-red-500/20 bg-red-950/40 text-red-300 hover:bg-red-950/60" : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"}`}
             >
               Xóa dự án
             </Button>
           </div>
         </div>
 
-        <div className={`p-4 rounded-xl mb-6 shadow-sm border self-end ml-auto max-w-[85%] ${
-          isDark ? "bg-slate-800/80 border-slate-700 text-slate-100" : "bg-blue-50 text-blue-900 border-blue-100"
+        <div className={`p-4 rounded-xl mb-6 shadow-sm border self-end ml-auto max-w-[85%] transition-all duration-300 ${
+          isDark ? "bg-slate-900/60 backdrop-blur-xl border-white/10 text-white shadow-black/25" : "bg-blue-50 text-blue-900 border-blue-100"
         }`}>
           <p className={`font-semibold text-xs mb-1 uppercase tracking-wider ${isDark ? "text-blue-300" : "text-blue-700"}`}>Yêu cầu của bạn</p>
           <p className="text-sm font-medium whitespace-pre-wrap">{selectedProject.prompt}</p>
         </div>
 
-        <div className={`p-6 rounded-2xl shadow-sm border mb-8 w-full max-w-[95%] ${
-          isDark ? "bg-slate-800/60 border-slate-700 text-slate-200" : "bg-white border-slate-100 text-slate-700"
-        }`}>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center text-white">
-              <Sparkles size={12} />
-            </div>
-            <span className="font-bold text-sm">Nội dung AI đã tạo</span>
-          </div>
-          <div className={`prose prose-sm max-w-none ${isDark ? "prose-invert" : "prose-slate"}`}>
-            {renderGeneratedContent(selectedProject.content, isDark)}
-          </div>
+        <div className="mb-8 space-y-4">
+          {renderGeneratedContent(selectedProject.content, isDark)}
         </div>
       </div>
     );
@@ -134,14 +162,19 @@ export default function ProjectStage({
 
   return (
     <div className="max-w-4xl mx-auto h-full flex flex-col justify-center items-center pt-10 lg:pt-20">
-      <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-blue-500 to-blue-300 shadow-md mb-6"></div>
+      <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 shadow-md mb-6 flex items-center justify-center text-white">
+        <Sparkles size={24} />
+      </div>
       <h2 className={`text-3xl md:text-4xl font-extrabold mb-3 tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>
         Xin chào
       </h2>
       <p className={`${isDark ? "text-slate-400" : "text-slate-500"} font-medium mb-12 text-center`}>
         Chọn một dự án từ thanh bên hoặc tạo dự án mới để bắt đầu.
       </p>
-      <Button onClick={onStartCreating} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-sm transition-colors flex items-center gap-2">
+      <Button 
+        onClick={onStartCreating} 
+        className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-blue-600/10 transition-all flex items-center gap-2 cursor-pointer"
+      >
         <Plus size={18} /> Bắt đầu dự án sáng tạo
       </Button>
     </div>

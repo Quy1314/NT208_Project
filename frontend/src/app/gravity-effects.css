@@ -27,8 +27,9 @@
       radial-gradient(circle at 64% 44%, rgba(96, 165, 250, 0.58) 0 21%, transparent 43%),
       radial-gradient(circle at 38% 65%, rgba(168, 85, 247, 0.56) 0 22%, transparent 46%),
       radial-gradient(circle at 52% 54%, rgba(14, 165, 233, 0.36) 0 42%, transparent 72%);
+
     filter: blur(26px) saturate(180%);
-    opacity: 0.98;
+    opacity: 0.4;
     mix-blend-mode: screen;
     transform: translate3d(-50%, -50%, 0) scale(1);
     animation: gravity-pulse 4.6s ease-in-out infinite;
