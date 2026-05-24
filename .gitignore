@@ -12,3 +12,13 @@ __pycache__/
 .agent/
 FEATURES.md
 .antigravity/mcp.json
+openspec/
+.vscode/
+.venv-test/
+backend/test_e2e_flow.py
+backend/test_e2e_flow_no_prompt.py
+backend/test_e2e_flow_frontend.py
+frontend/node_modules_test/
+backend/uploads/
+generated_test_image.png
+openspec_report.html

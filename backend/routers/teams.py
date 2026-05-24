@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/teams", tags=["Teams"])
 @router.get("/", response_model=list[models.TeamResponse])
 def get_my_teams(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     teams = db.query(models.TeamWorkspace).filter(models.TeamWorkspace.owner_id == current_user.id).all()
-    return [models.TeamResponse(id=str(t.id), name=t.name) for t in teams]
+    return [models.TeamResponse(id=str(t.id), name=str(t.name)) for t in teams]
 
 
 @router.post("/", response_model=models.TeamResponse, status_code=status.HTTP_201_CREATED)
@@ -25,7 +25,7 @@ def create_team(data: models.TeamCreateReq, db: Session = Depends(get_db), curre
     db.add(team)
     db.commit()
     db.refresh(team)
-    return models.TeamResponse(id=str(team.id), name=team.name)
+    return models.TeamResponse(id=str(team.id), name=str(team.name))
 
 
 @router.post("/project-token")
@@ -64,3 +64,84 @@ def get_or_create_project_team_token(
         "team_id": str(team.id),
         "token": item.token,
     }
+
+
+@router.post("/{team_id}/join")
+def join_team(
+    team_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    try:
+        from uuid import UUID
+        team_uuid = UUID(team_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ID nhóm không hợp lệ.")
+
+    team = db.query(models.TeamWorkspace).filter(models.TeamWorkspace.id == team_uuid).first()
+    if not team:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy nhóm.")
+
+    # Check if owner
+    if team.owner_id == current_user.id:
+        return {"message": "Bạn là chủ sở hữu của nhóm này.", "team_id": team_id}
+
+    # Check if already joined
+    existing_member = db.query(models.TeamMember).filter(
+        models.TeamMember.team_id == team_uuid,
+        models.TeamMember.user_id == current_user.id
+    ).first()
+    if existing_member:
+        return {"message": "Bạn đã tham gia nhóm này rồi.", "team_id": team_id}
+
+    # Join
+    member = models.TeamMember(team_id=team_uuid, user_id=current_user.id, role="member")
+    db.add(member)
+    db.commit()
+    db.refresh(member)
+    return {"message": "Tham gia nhóm thành công.", "team_id": team_id}
+
+
+@router.post("/{team_id}/quit")
+def quit_team(
+    team_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    try:
+        from uuid import UUID
+        team_uuid = UUID(team_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="ID nhóm không hợp lệ.")
+
+    team = db.query(models.TeamWorkspace).filter(models.TeamWorkspace.id == team_uuid).first()
+    if not team:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy nhóm.")
+
+    if team.owner_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Chủ sở hữu nhóm không thể quit nhóm. Hãy xóa nhóm nếu cần."
+        )
+
+    # Check if member
+    member = db.query(models.TeamMember).filter(
+        models.TeamMember.team_id == team_uuid,
+        models.TeamMember.user_id == current_user.id
+    ).first()
+    if not member:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bạn chưa tham gia nhóm này.")
+
+    db.delete(member)
+    db.commit()
+    return {"message": "Rời nhóm thành công.", "team_id": team_id}
+
+
+@router.post("/{team_id}/leave")
+def leave_team(
+    team_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    return quit_team(team_id, db, current_user)
+

@@ -235,7 +235,9 @@ function WorkspaceComposerDock({
           value={selectedProject ? continuePrompt : prompt}
           onChange={(e) => (selectedProject ? setContinuePrompt(e.target.value) : setPrompt(e.target.value))}
           placeholder={placeholderText}
-          className="w-full max-h-32 min-h-[60px] p-3 text-[#f3f4f6] border-0 shadow-none focus-visible:ring-0 resize-none placeholder-[#6b7280] bg-transparent font-medium"
+          className={`w-full max-h-32 min-h-[60px] p-3 border-0 shadow-none focus-visible:ring-0 resize-none bg-transparent font-medium ${
+            isDark ? "text-[#f3f4f6] placeholder-[#6b7280]" : "text-slate-900 placeholder-slate-400"
+          }`}
         />
 
         <div className={`flex items-center justify-between pt-2 px-2 border-t mt-1 ${
@@ -253,9 +255,9 @@ function WorkspaceComposerDock({
               }`}
             >
               {modelGroups.map((g) => (
-                <optgroup key={g.label} label={g.label}>
+                <optgroup key={g.label} label={g.label} className={isDark ? "bg-slate-900 text-slate-300 font-semibold" : "bg-white text-slate-700 font-semibold"}>
                   {g.models.map((id) => (
-                    <option key={id} value={id}>
+                    <option key={id} value={id} className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>
                       {id}
                     </option>
                   ))}
@@ -272,9 +274,9 @@ function WorkspaceComposerDock({
                     : "bg-slate-50 border-slate-200 text-slate-700"
                 }`}
               >
-                <option>Focused</option>
-                <option>Balanced</option>
-                <option>Creative</option>
+                <option className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Focused</option>
+                <option className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Balanced</option>
+                <option className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Creative</option>
               </select>
             )}
             <select
@@ -286,19 +288,19 @@ function WorkspaceComposerDock({
                   : "bg-slate-50 border-slate-200 text-slate-700"
               }`}
             >
-              <option value="vietnamese">vietnamese</option>
-              <option value="english">english</option>
+              <option value="vietnamese" className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>vietnamese</option>
+              <option value="english" className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>english</option>
             </select>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            <Button variant="ghost" size="sm" className={`text-[#a1a1aa] hover:text-white ${
-              isDark ? "hover:bg-white/5" : "hover:bg-slate-200"
+            <Button variant="ghost" size="sm" className={`text-[#a1a1aa] ${
+              isDark ? "hover:text-white hover:bg-white/5" : "hover:text-slate-800 hover:bg-slate-200"
             }`}>
               <Paperclip size={14} /> Đính kèm
             </Button>
-            <Button variant="ghost" size="sm" className={`text-[#a1a1aa] hover:text-white ${
-              isDark ? "hover:bg-white/5" : "hover:bg-slate-200"
+            <Button variant="ghost" size="sm" className={`text-[#a1a1aa] ${
+              isDark ? "hover:text-white hover:bg-white/5" : "hover:text-slate-800 hover:bg-slate-200"
             }`}>
               <Mic size={14} /> Giọng nói
             </Button>
@@ -1538,9 +1540,9 @@ export default function DashboardPage() {
                           : "bg-slate-50 border-slate-200 text-slate-900"
                       }`}
                     >
-                      <option value="md">Markdown (.md)</option>
-                      <option value="docx">Word (.docx)</option>
-                      <option value="pdf">PDF (.pdf)</option>
+                      <option value="md" className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Markdown (.md)</option>
+                      <option value="docx" className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Word (.docx)</option>
+                      <option value="pdf" className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>PDF (.pdf)</option>
                     </select>
                   </div>
                   <div>
@@ -1557,9 +1559,9 @@ export default function DashboardPage() {
                           : "bg-slate-50 border-slate-200 text-slate-900"
                       }`}
                     >
-                      <option value="none">Không dịch</option>
-                      <option value="vi-to-en">Tiếng Việt → Tiếng Anh</option>
-                      <option value="en-to-vi">Tiếng Anh → Tiếng Việt</option>
+                      <option value="none" className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Không dịch</option>
+                      <option value="vi-to-en" className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Tiếng Việt → Tiếng Anh</option>
+                      <option value="en-to-vi" className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Tiếng Anh → Tiếng Việt</option>
                     </select>
                     <p className="mt-2 text-[11px] text-[#6b7280] leading-relaxed">
                       Nếu bạn đã lưu HF token trong Cá nhân hóa thì request dịch sẽ dùng token đó.

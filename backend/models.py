@@ -63,6 +63,16 @@ class TeamWorkspace(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 
+class TeamMember(Base):
+    __tablename__ = "team_workspace_members"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
+    team_id = Column(UUID(as_uuid=True), ForeignKey("team_workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(20), nullable=False, default="member")
+    joined_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
 class ProjectTeamToken(Base):
     __tablename__ = "project_team_tokens"
 

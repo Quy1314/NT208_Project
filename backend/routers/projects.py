@@ -36,6 +36,7 @@ FPT_TTS_MODEL = "fpt-ai-tts-v5"
 HF_IMAGE_MODELS = frozenset(
     {
         "black-forest-labs/FLUX.1-dev",
+        "black-forest-labs/FLUX.1-schnell",
         "stabilityai/stable-diffusion-xl-base-1.0",
         "runwayml/stable-diffusion-v1-5",
         "Lykon/DreamShaper",
@@ -108,6 +109,62 @@ def _build_recent_context(db: Session, project_id: str | UUID) -> str:
     return "\n\n".join(blocks)
 
 
+def _contains_vietnamese(text: str) -> bool:
+    """Detect if text contains Vietnamese diacritics (beyond basic ASCII/Latin)."""
+    vi_pattern = re.compile(r"[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]", re.IGNORECASE)
+    return bool(vi_pattern.search(text))
+
+
+def _translate_prompt_for_image(prompt: str, api_key: str) -> str:
+    """
+    Dịch prompt tiếng Việt sang tiếng Anh cho model tạo ảnh.
+    Dùng LLM để dịch chính xác hơn thay vì model dịch thuật đơn giản.
+    Fallback: dùng Helsinki-NLP nếu LLM không khả dụng.
+    """
+    try:
+        client = InferenceClient(token=api_key)
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert prompt engineer and translator specialized in converting Vietnamese image generation prompts to English.\n"
+                    "Your task is to translate and optimize the user's prompt for text-to-image models (like Stable Diffusion or FLUX.1).\n"
+                    "Follow these rules strictly:\n"
+                    "1. Do NOT include conversational filler or meta-instructions like 'Create an image of', 'A photo of', 'Draw a', 'Depict a', 'Show a'. Start directly with the core subjects.\n"
+                    "2. Translate accurately and descriptively. For example, translate 'cá voi có cánh' to 'winged whales' or 'whales with wings', NOT 'whale fish with wings'.\n"
+                    "3. Keep all visual details, colors, actions, and background settings from the original prompt.\n"
+                    "4. Format as a clean, structured description: [Subject(s) doing action], [Environment/Background details], [Lighting/Style/Vibe].\n"
+                    "5. Output ONLY the translated English prompt. No introductions, no explanations, no quotes."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
+        response = client.chat_completion(
+            model="Qwen/Qwen2.5-72B-Instruct",
+            messages=messages,
+            max_tokens=512,
+            temperature=0.3,
+        )
+        if response and response.choices:
+            translated = str(response.choices[0].message.content).strip()
+            if translated and not _contains_vietnamese(translated):
+                print(f"[IMAGE] Translated prompt: {prompt!r} -> {translated!r}")
+                return translated
+    except Exception as e:
+        print(f"[IMAGE] LLM translation failed, trying Helsinki-NLP: {e}")
+
+    # Fallback: dùng translation model trực tiếp
+    try:
+        translated = _translate_text_via_hf(prompt, "vi-to-en", api_key)
+        if translated and translated.strip() and not _contains_vietnamese(translated):
+            print(f"[IMAGE] Helsinki-NLP translated: {prompt!r} -> {translated!r}")
+            return translated.strip()
+    except Exception as e:
+        print(f"[IMAGE] Helsinki-NLP translation also failed: {e}")
+
+    return prompt
+
+
 def generate_image_content(
     instruction: str,
     model_name: str | None,
@@ -115,6 +172,7 @@ def generate_image_content(
 ) -> str:
     """
     Sinh ảnh qua Hugging Face Inference text-to-image.
+    Tự động dịch prompt tiếng Việt sang tiếng Anh trước khi gửi cho model.
     Trả về chuỗi data URL PNG để frontend hiển thị trực tiếp.
     """
     try:
@@ -131,23 +189,36 @@ def generate_image_content(
 
         model_id = (model_name or "").strip()
         if model_id not in HF_IMAGE_MODELS:
-            model_id = "runwayml/stable-diffusion-v1-5"
+            model_id = "black-forest-labs/FLUX.1-schnell"
 
-        client = InferenceClient(token=api_key)
-        image = client.text_to_image(
-            instruction.strip(),
-            model=model_id,
-            guidance_scale=7.5,
-            num_inference_steps=28,
+        # Auto-translate Vietnamese prompt to English for image models
+        final_prompt = instruction.strip()
+        if _contains_vietnamese(final_prompt):
+            final_prompt = _translate_prompt_for_image(final_prompt, api_key)
+
+        import requests
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        res = requests.post(
+            f"https://router.huggingface.co/hf-inference/models/{model_id}",
+            headers=headers,
+            json={"inputs": final_prompt},
+            timeout=90
         )
+        if res.status_code != 200:
+            raise RuntimeError(f"Hugging Face API returned status {res.status_code}: {res.text}")
 
-        buf = io.BytesIO()
-        if isinstance(image, PILImage.Image):
-            image.save(buf, format="PNG")
-        else:
-            buf.write(bytes(image))
+        buf = io.BytesIO(res.content)
+        try:
+            # Verify if valid image
+            img = PILImage.open(buf)
+            img.verify()
+        except Exception:
+            raise RuntimeError(f"API response is not a valid image. Details: {res.content[:200]}")
 
-        b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+        b64 = base64.b64encode(res.content).decode("ascii")
         return f"data:image/png;base64,{b64}"
     except Exception as e:
         print(f"Lỗi text-to-image Hugging Face: {e}")
@@ -158,6 +229,7 @@ def generate_image_content(
                 "Bạn có thể thêm credits/nâng cấp PRO trên Hugging Face, hoặc vào Personalize để dùng một HF token khác còn quota."
             )
         return f"Không tạo được ảnh qua Hugging Face Inference. Chi tiết: {error_text}"
+
 
 
 def generate_story_content(
@@ -702,6 +774,7 @@ def create_project(
             )
             stored_bytes, ext = to_mp3_if_possible(audio_bytes)
             audio_filename = f"audio_{new_project.id}_{int(time.time() * 1000)}.{ext}"
+            upload_dir = get_audio_upload_dir()
             audio_path = os.path.join(upload_dir, audio_filename)
             with open(audio_path, "wb") as f:
                 f.write(stored_bytes)
@@ -712,7 +785,7 @@ def create_project(
             
             entry = db.query(models.ProjectContextEntry).filter(models.ProjectContextEntry.project_id == pid).order_by(models.ProjectContextEntry.created_at.desc()).first()
             if entry:
-                entry.generated_content = new_project_obj.content
+                cast(Any, entry).generated_content = new_project_obj.content
 
             audio_file = models.AudioFile(
                 project_id=new_project.id,
