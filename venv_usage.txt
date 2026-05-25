@@ -1,3 +1,8 @@
+# For Windows terminal
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# For Linux terminal
+python -m venv .venv
+source .venv/bin/activate
