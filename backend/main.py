@@ -29,16 +29,26 @@ from routers import projects, teams, audio, canon, video, prompt_templates
 if os.getenv("AUTO_CREATE_TABLES", "false").lower() == "true":
     Base.metadata.create_all(bind=engine)
 
+# Vercel Serverless chỉ cho ghi file tạm trong /tmp; bundle /var/task là read-only.
+def _runtime_dir(name: str) -> Path:
+    if os.getenv("VERCEL"):
+        return Path("/tmp") / name
+    return Path(name)
+
+
+OUTPUTS_DIR = _runtime_dir("outputs")
+UPLOADS_DIR = _runtime_dir("uploads")
+
 # Tạo folder outputs và uploads
-os.makedirs("outputs", exist_ok=True)
-os.makedirs("uploads/audio", exist_ok=True)
+OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+(UPLOADS_DIR / "audio").mkdir(parents=True, exist_ok=True)
 
 # Khởi tạo application FastAPI chính
 app = FastAPI()
 
 # Mount folder outputs và uploads để frontend có thể truy cập file tĩnh nếu cần
-app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/outputs", StaticFiles(directory=str(OUTPUTS_DIR)), name="outputs")
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 # Cấu hình CORS Middleware: Cho phép Frontend gọi API qua Backend
 app.add_middleware(

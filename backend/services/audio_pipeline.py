@@ -9,6 +9,8 @@ from services.tts import generate_tts_audio
 
 
 def get_audio_upload_dir() -> str:
+    if os.getenv("VERCEL"):
+        return os.path.abspath(os.path.join("/tmp", "uploads", "audio"))
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "uploads", "audio"))
 
 
