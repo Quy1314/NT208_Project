@@ -1,3 +1,10 @@
+# Only keep these top-level folders in Git
+/*/
+!/backend/
+!/frontend/
+!/runbook/
+
+# Existing ignored paths
 tasks/
 .cursor/
 picsart_crawl_data/
