@@ -18,8 +18,10 @@ import auth
 from routers import projects, teams, audio, canon, video, prompt_templates
 
 
-# Tạo sẵn toàn bộ bảng trong database nếu chưa tồn tại
-Base.metadata.create_all(bind=engine)
+# Không tự tạo bảng khi import app trên production/serverless.
+# Chạy schema/migration riêng thay vì gọi create_all ở cold start Vercel.
+if os.getenv("AUTO_CREATE_TABLES", "false").lower() == "true":
+    Base.metadata.create_all(bind=engine)
 
 # Tạo folder outputs và uploads
 os.makedirs("outputs", exist_ok=True)
