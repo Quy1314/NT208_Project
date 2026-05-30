@@ -11,7 +11,11 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL is None:
     raise RuntimeError("DATABASE_URL is not configured. Set it in backend/.env or the environment.")
 
-engine = create_engine(DATABASE_URL) # kết nối đến database
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"sslmode": "require"},
+    pool_pre_ping=True,
+) # kết nối đến database
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) # tạo session
 Base = declarative_base()  # base class cho các model
 
