@@ -103,7 +103,7 @@ export default function AuthShell({
           {/* Middle Quote */}
           <div className="space-y-6 max-w-lg">
             <blockquote className="text-3xl font-extrabold leading-tight text-white drop-shadow-sm">
-              "{quote}"
+              &ldquo;{quote}&rdquo;
             </blockquote>
             <div className="space-y-2">
               <p className="text-sm font-semibold text-slate-300">{author}</p>

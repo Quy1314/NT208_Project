@@ -7,8 +7,14 @@ Tài liệu này hướng dẫn deploy project gồm:
 
 Khuyến nghị deploy thành **2 Vercel projects riêng**:
 
-1. `project-ai-agent-backend`
-2. `project-ai-agent-frontend`
+1. `nt-208-backendg4` / backend FastAPI
+2. frontend Next.js project riêng
+
+Backend production hiện tại:
+
+```text
+https://nt-208-backendg4.vercel.app
+```
 
 Cách này dễ cấu hình environment variables, domain và CORS hơn.
 
@@ -54,7 +60,7 @@ Copy các key cần thiết để nhập vào Vercel.
 1. Vào <https://vercel.com/new>
 2. Import GitHub repository của project.
 3. Ở bước cấu hình project:
-   - **Project Name**: `project-ai-agent-backend`
+   - **Project Name**: `nt-208-backendg4` hoặc tên backend riêng.
    - **Framework Preset**: `Other`
    - **Root Directory**: để root repo, không chọn `backend/`
 4. Deploy lần đầu có thể fail nếu chưa có file cấu hình `vercel.json`; làm tiếp bước dưới.
@@ -139,9 +145,11 @@ https://project-ai-agent-backend.vercel.app
 Test các endpoint:
 
 ```bash
-curl https://project-ai-agent-backend.vercel.app/
-curl https://project-ai-agent-backend.vercel.app/test-db
+curl https://nt-208-backendg4.vercel.app/
+curl https://nt-208-backendg4.vercel.app/test-db
 ```
+
+Nếu dùng domain preview hoặc project khác, thay URL bằng domain backend tương ứng.
 
 Kết quả mong muốn:
 
@@ -195,17 +203,15 @@ Vào Vercel project frontend:
 Settings → Environment Variables
 ```
 
-Thêm biến trỏ về backend production. Tên biến cần khớp với code frontend đang dùng.
-
-Ví dụ nếu code dùng `NEXT_PUBLIC_API_URL`:
+Code frontend hiện đọc biến `NEXT_PUBLIC_API_URL` trong [api.ts](file:///c:/Documentss/LtrinhWeb/Project_AI_Agent/frontend/src/lib/api.ts):
 
 ```text
-NEXT_PUBLIC_API_URL=https://project-ai-agent-backend.vercel.app
+NEXT_PUBLIC_API_URL=https://nt-208-backendg4.vercel.app
 ```
 
-Nếu code đang dùng tên khác, ví dụ `NEXT_PUBLIC_BACKEND_URL`, dùng đúng tên đó.
-
 > Với Next.js, biến môi trường dùng trong browser phải bắt đầu bằng `NEXT_PUBLIC_`.
+>
+> Sau khi đổi `NEXT_PUBLIC_API_URL`, phải **Redeploy frontend** vì biến này được bake vào bundle lúc build.
 
 ### 4.3. Deploy frontend
 
@@ -240,18 +246,29 @@ Kiểm tra:
 
 ## 5. Lưu ý quan trọng khi dùng Vercel cho backend FastAPI
 
-### 5.1. File upload và file sinh ra không bền vững
-
 Vercel Serverless không phù hợp để lưu file lâu dài trong local filesystem.
 
-Các folder như:
+Quan trọng:
+
+- Bundle deploy của Vercel là read-only.
+- Không được tạo/ghi thư mục như `outputs/`, `uploads/` trong root app khi chạy production.
+- Chỉ thư mục `/tmp` là writable, nhưng **ephemeral** và có thể mất giữa cold start/redeploy.
+
+Project hiện đã xử lý runtime path trong backend để khi có biến `VERCEL=1` thì ghi tạm vào:
+
+```text
+/tmp/outputs
+/tmp/uploads/audio
+```
+
+Các folder local như:
 
 ```text
 backend/uploads/
 backend/outputs/
 ```
 
-có thể bị mất giữa các lần deploy hoặc cold start.
+vẫn chỉ nên dùng cho development và không dùng làm persistent storage production.
 
 Nếu app cần lưu ảnh/audio/video, nên dùng storage ngoài:
 
@@ -317,6 +334,7 @@ Nếu chỉ sửa frontend:
 - [ ] Có `vercel.json` ở root repo.
 - [ ] `requirements.txt` đầy đủ package.
 - [ ] Đã nhập environment variables trong Vercel backend project.
+- [ ] Không ghi file vào root app; runtime temp file dùng `/tmp` trên Vercel.
 - [ ] `/` trả về welcome message.
 - [ ] `/test-db` kết nối database thành công.
 - [ ] CORS đã allow domain frontend production.
@@ -374,6 +392,52 @@ Failed to fetch http://localhost:8000/...
 
 Cách sửa:
 
-1. Đảm bảo frontend dùng biến `NEXT_PUBLIC_*` cho base API URL.
-2. Set biến đó trên Vercel frontend project.
+1. Đảm bảo frontend dùng biến `NEXT_PUBLIC_API_URL` cho base API URL.
+2. Set biến đó trên Vercel frontend project:
+
+   ```text
+   NEXT_PUBLIC_API_URL=https://nt-208-backendg4.vercel.app
+   ```
+
 3. Redeploy frontend.
+
+### Lỗi `OSError: [Errno 30] Read-only file system`
+
+Triệu chứng trong Vercel logs:
+
+```text
+OSError: [Errno 30] Read-only file system: 'outputs'
+OSError: [Errno 30] Read-only file system: 'uploads'
+```
+
+Nguyên nhân:
+
+- Vercel Serverless không cho ghi vào bundle app/root repo lúc runtime.
+- Code tạo thư mục hoặc ghi file vào `outputs/`, `uploads/` tại root sẽ crash.
+
+Cách sửa:
+
+1. Không gọi `os.makedirs("outputs")` hoặc `os.makedirs("uploads/...")` trực tiếp tại root app khi chạy trên Vercel.
+2. Dùng helper kiểm tra `os.getenv("VERCEL")` và chuyển runtime write path sang `/tmp`.
+3. Nếu file cần lưu lâu dài, chuyển sang Supabase Storage, S3, Cloudinary hoặc Firebase Storage.
+4. Commit, push và chờ Vercel redeploy.
+
+### Lỗi `ModuleNotFoundError` cho module nội bộ
+
+Ví dụ:
+
+```text
+ModuleNotFoundError: No module named 'database'
+```
+
+Cách sửa:
+
+1. Kiểm tra import trong backend khi chạy từ entrypoint `backend/main.py`.
+2. Ưu tiên dùng package import rõ ràng, ví dụ `from backend.database import ...`, hoặc đảm bảo `sys.path`/package layout tương thích Vercel.
+3. Test local bằng import mô phỏng production:
+
+   ```bash
+   python -c "import os; os.environ['VERCEL']='1'; import backend.main"
+   ```
+
+4. Commit, push và redeploy backend.
