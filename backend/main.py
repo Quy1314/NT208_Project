@@ -46,20 +46,6 @@ OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 # Khởi tạo application FastAPI chính
 app = FastAPI()
 
-import traceback
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    tb = traceback.format_exc()
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": "Internal Server Error",
-            "error": str(exc),
-            "traceback": tb.splitlines()
-        }
-    )
-
 # Mount folder outputs và uploads để frontend có thể truy cập file tĩnh nếu cần
 app.mount("/outputs", StaticFiles(directory=str(OUTPUTS_DIR)), name="outputs")
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
@@ -167,23 +153,3 @@ def test_db():
             }
     except Exception as e:
         return {"message": "Database connection failed", "error": str(e)}
-
-@app.get("/test-bcrypt")
-def test_bcrypt():
-    try:
-        from passlib.context import CryptContext
-        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        hashed = pwd_context.hash("testpassword")
-        verified = pwd_context.verify("testpassword", hashed)
-        return {
-            "status": "success",
-            "hashed": hashed,
-            "verified": verified
-        }
-    except Exception as e:
-        import traceback
-        return {
-            "status": "failed",
-            "error": str(e),
-            "traceback": traceback.format_exc().splitlines()
-        }
