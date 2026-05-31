@@ -167,3 +167,23 @@ def test_db():
             }
     except Exception as e:
         return {"message": "Database connection failed", "error": str(e)}
+
+@app.get("/test-bcrypt")
+def test_bcrypt():
+    try:
+        from passlib.context import CryptContext
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        hashed = pwd_context.hash("testpassword")
+        verified = pwd_context.verify("testpassword", hashed)
+        return {
+            "status": "success",
+            "hashed": hashed,
+            "verified": verified
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "failed",
+            "error": str(e),
+            "traceback": traceback.format_exc().splitlines()
+        }
