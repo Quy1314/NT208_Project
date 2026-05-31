@@ -149,6 +149,12 @@ type WorkspaceComposerDockProps = {
   onSubmit: () => void;
   personalHfKeyActive: boolean;
   isDark: boolean;
+  attachedFile: File | null;
+  isRecording: boolean;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  clearAttachedFile: () => void;
+  toggleSpeechRecognition: () => void;
 };
 
 function WorkspaceComposerDock({
@@ -175,6 +181,12 @@ function WorkspaceComposerDock({
   onSubmit,
   personalHfKeyActive,
   isDark,
+  attachedFile,
+  isRecording,
+  fileInputRef,
+  handleFileChange,
+  clearAttachedFile,
+  toggleSpeechRecognition,
 }: WorkspaceComposerDockProps) {
   if (!isVisible) return null;
 
@@ -240,6 +252,31 @@ function WorkspaceComposerDock({
           }`}
         />
 
+        {attachedFile && (
+          <div className="px-3 pb-2 flex items-center gap-2">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold w-max border ${
+              isDark ? "bg-slate-950/60 border-white/10 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-700"
+            }`}>
+              <span>📄 {attachedFile.name} ({Math.round(attachedFile.size / 1024)} KB)</span>
+              <button 
+                type="button"
+                onClick={clearAttachedFile} 
+                className="font-bold ml-1 transition-colors hover:text-red-500 cursor-pointer"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          style={{ display: "none" }} 
+          onChange={handleFileChange} 
+          accept=".txt,.md,.json,.csv,.js,.ts,.py,.html,.css,.xml" 
+        />
+
         <div className={`flex items-center justify-between pt-2 px-2 border-t mt-1 ${
           isDark ? "border-white/10" : "border-slate-200/50"
         }`}>
@@ -294,15 +331,29 @@ function WorkspaceComposerDock({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap justify-end">
-            <Button variant="ghost" size="sm" className={`text-[#a1a1aa] ${
-              isDark ? "hover:text-white hover:bg-white/5" : "hover:text-slate-800 hover:bg-slate-200"
-            }`}>
-              <Paperclip size={14} /> Đính kèm
+            <Button 
+              type="button"
+              variant="ghost" 
+              size="sm" 
+              onClick={() => fileInputRef.current?.click()}
+              className={`text-[#a1a1aa] gap-1 cursor-pointer ${
+                isDark ? "hover:text-white hover:bg-white/5" : "hover:text-slate-800 hover:bg-slate-200"
+              }`}
+            >
+              <Paperclip size={14} /> {attachedFile ? "Đã đính kèm" : "Đính kèm"}
             </Button>
-            <Button variant="ghost" size="sm" className={`text-[#a1a1aa] ${
-              isDark ? "hover:text-white hover:bg-white/5" : "hover:text-slate-800 hover:bg-slate-200"
-            }`}>
-              <Mic size={14} /> Giọng nói
+            <Button 
+              type="button"
+              variant="ghost" 
+              size="sm" 
+              onClick={toggleSpeechRecognition}
+              className={`gap-1 cursor-pointer transition-all ${
+                isRecording 
+                  ? "text-red-500 hover:text-red-400 bg-red-500/10 animate-pulse font-bold" 
+                  : `text-[#a1a1aa] ${isDark ? "hover:text-white hover:bg-white/5" : "hover:text-slate-800 hover:bg-slate-200"}`
+              }`}
+            >
+              <Mic size={14} /> {isRecording ? "Đang ghi âm..." : "Giọng nói"}
             </Button>
 
             <Button
@@ -387,6 +438,88 @@ export default function DashboardPage() {
 
   const [videoMessages, setVideoMessages] = useState<VideoChatMessage[]>([]);
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+
+  // File attachments and voice recording states
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [attachedFileContent, setAttachedFileContent] = useState<string>("");
+  const [isRecording, setIsRecording] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Dung lượng file tối đa là 5MB.");
+      return;
+    }
+
+    setAttachedFile(file);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      setAttachedFileContent(text || "");
+    };
+    reader.onerror = () => {
+      alert("Không thể đọc nội dung file này.");
+      setAttachedFile(null);
+      setAttachedFileContent("");
+    };
+    reader.readAsText(file);
+  };
+
+  const clearAttachedFile = () => {
+    setAttachedFile(null);
+    setAttachedFileContent("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const toggleSpeechRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Trình duyệt của bạn không hỗ trợ nhận diện giọng nói (Speech Recognition). Hãy thử trên Chrome hoặc Edge.");
+      return;
+    }
+
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+    } else {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      recognition.lang = language === "vietnamese" ? "vi-VN" : "en-US";
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[event.results.length - 1][0].transcript;
+        if (selectedProject) {
+          setContinuePrompt(prev => prev + (prev ? " " : "") + transcript);
+        } else {
+          setPrompt(prev => prev + (prev ? " " : "") + transcript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
+        setIsRecording(false);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    }
+  };
 
   const fetchUserProfile = async () => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
@@ -719,17 +852,22 @@ export default function DashboardPage() {
     setIsGenerating(true);
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     const promptText = prompt;
+    let finalPromptText = promptText;
+    if (attachedFile && attachedFileContent) {
+      finalPromptText = `${promptText}\n\n--- [Nội dung file: ${attachedFile.name}] ---\n${attachedFileContent}\n---`;
+    }
     try {
       const res = await fetch(`${API_BASE_URL}/api/projects/${streamParam}`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify(toProjectCreateApiPayload({ title: finalTitle, prompt: promptText, language, modelName: modelName.trim() })),
+        body: JSON.stringify(toProjectCreateApiPayload({ title: finalTitle, prompt: finalPromptText, language, modelName: modelName.trim() })),
       });
       if (res.ok) {
         if (isTextModel) {
           setTitle("");
           setPrompt("");
           setIsCreating(false);
+          clearAttachedFile();
 
           setSelectedProject({
             id: "",
@@ -805,6 +943,7 @@ export default function DashboardPage() {
           setTitle("");
           setPrompt("");
           setIsCreating(false);
+          clearAttachedFile();
           setSelectedProject(data);
           fetchProjects();
         }
@@ -843,14 +982,19 @@ export default function DashboardPage() {
     setIsContinuing(true);
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     const promptText = continuePrompt;
+    let finalPromptText = promptText;
+    if (attachedFile && attachedFileContent) {
+      finalPromptText = `${promptText}\n\n--- [Nội dung file: ${attachedFile.name}] ---\n${attachedFileContent}\n---`;
+    }
     setContinuePrompt("");
+    clearAttachedFile();
     const prevContent = selectedProject.content || "";
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/continue${streamParam}`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify(toProjectContinueApiPayload({ prompt: promptText, language, modelName: modelName.trim() })),
+        body: JSON.stringify(toProjectContinueApiPayload({ prompt: finalPromptText, language, modelName: modelName.trim() })),
       });
       if (res.ok) {
         if (isTextModel) {
@@ -1419,6 +1563,12 @@ export default function DashboardPage() {
             onSubmit={handleBottomSubmit}
             personalHfKeyActive={personalHfKeyActive}
             isDark={isDark}
+            attachedFile={attachedFile}
+            isRecording={isRecording}
+            fileInputRef={fileInputRef}
+            handleFileChange={handleFileChange}
+            clearAttachedFile={clearAttachedFile}
+            toggleSpeechRecognition={toggleSpeechRecognition}
           />
 
           {isProfileOpen && (
