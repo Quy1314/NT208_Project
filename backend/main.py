@@ -58,6 +58,7 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "https://nt-208-projectfrontend.vercel.app",
     ],
+    allow_origin_regex=r"https://nt-208-projectfrontend-[a-z0-9-]+-quy1314s-projects\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
