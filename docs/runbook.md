@@ -195,6 +195,18 @@ Kling-specific options: `kling_model`, `kling_duration` (`"5"` hoặc `"10"`), `
 | Semantic retrieval lỗi / chunk trống | Gọi `POST …/canon/reindex` với `X-HF-Api-Key`; kiểm tra `CANON_EMBEDDING_MODEL`. |
 | Muốn drift thấp hơn nữa | Mở rộng `negative_bank` + `style_pack_json` trong visual bible; lên kế hoạch worker GPU (IP-Adapter) — `docs/workflows/text-image-continuity.md`. |
 
+### 3.9 Streaming Response (Streaming Reason / Progressive text)
+
+Hệ thống hỗ trợ cơ chế phản hồi dạng stream (Server-Sent Events - SSE) cho các mô hình ngôn ngữ (text generation) để tối ưu trải nghiệm người dùng:
+- Các endpoint hỗ trợ: `POST /api/projects/` và `POST /api/projects/{project_id}/continue`.
+- Kích hoạt bằng cách truyền thêm tham số query: `?stream=true`.
+- Trạng thái trả về: `text/event-stream` bao gồm các loại event:
+  - `event: init` mang project ID vừa tạo.
+  - `event: chunk` mang các phần văn bản được sinh ra liên tiếp.
+  - `event: done` mang nội dung truyện đầy đủ cuối cùng sau khi hoàn tất.
+  - `event: error` nếu có lỗi trong quá trình kết nối/gọi API AI.
+- Nếu không bật `stream=true` hoặc request đối với các mô hình media (Stable Diffusion, TTS), hệ thống tự động quay về cơ chế phản hồi JSON đồng bộ truyền thống.
+
 ---
 
 ## 4. Frontend (Next.js)
@@ -278,6 +290,9 @@ Hệ thống cung cấp một script kiểm thử tích hợp E2E tự động c
 10. **Tạo Ảnh (Create Image)**: Sinh ảnh từ prompt sử dụng model Diffusion (mặc định: `black-forest-labs/FLUX.1-schnell`).
 11. **Tạo Video (Create Video)**: Sinh video ngắn bằng prompt qua provider `fal` (`fal-ai/minimax/video-01`).
 12. **Tạo Âm thanh (Create Audio)**: Tạo tác vụ sinh giọng nói (TTS) không đồng bộ qua API FPT AI và polling trạng thái cho đến khi hoàn thành.
+13. **Quy trình đa phương tiện liên tiếp (Multi-modal Story Flow)**: Tạo truyện chữ -> sinh ảnh mô tả -> sinh audio đọc truyện trong cùng một dự án.
+14. **Streaming Story Creation**: Kiểm tra tính năng stream Server-Sent Events khi tạo mới dự án chữ.
+15. **Streaming Story Continuation**: Kiểm tra tính năng stream Server-Sent Events khi yêu cầu viết tiếp.
 
 ### 7.2 Cách chạy kiểm thử E2E
 Đảm bảo backend uvicorn đang chạy (ví dụ trên cổng `8001`), sau đó đứng ở thư mục gốc của repository chạy lệnh:
