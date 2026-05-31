@@ -713,21 +713,101 @@ export default function DashboardPage() {
 
     if (isGenerating) return;
 
+    const isTextModel = !isAudioModelId(modelName) && !isImageModelId(modelName) && !isVideoModelId(modelName);
+    const streamParam = isTextModel ? "?stream=true" : "";
+
     setIsGenerating(true);
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    const promptText = prompt;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/projects/`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${streamParam}`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify(toProjectCreateApiPayload({ title: finalTitle, prompt, language, modelName: modelName.trim() })),
+        body: JSON.stringify(toProjectCreateApiPayload({ title: finalTitle, prompt: promptText, language, modelName: modelName.trim() })),
       });
       if (res.ok) {
-        const data = await res.json();
-        setTitle("");
-        setPrompt("");
-        setIsCreating(false);
-        setSelectedProject(data);
-        fetchProjects();
+        if (isTextModel) {
+          setTitle("");
+          setPrompt("");
+          setIsCreating(false);
+
+          setSelectedProject({
+            id: "",
+            title: finalTitle,
+            prompt: promptText,
+            content: "Waiting for LLM generation..."
+          });
+
+          const reader = res.body?.getReader();
+          if (!reader) {
+            alert("Không thể đọc stream từ server.");
+            setIsGenerating(false);
+            return;
+          }
+
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let accumulatedText = "";
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
+
+              let currentEvent = "";
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                if (trimmed.startsWith("event:")) {
+                  currentEvent = trimmed.slice(6).trim();
+                } else if (trimmed.startsWith("data:")) {
+                  const dataStr = trimmed.slice(5).trim();
+                  try {
+                    const payload = JSON.parse(dataStr);
+                    if (currentEvent === "init") {
+                      const pid = payload.id;
+                      setSelectedProject(prev => {
+                        if (!prev) return null;
+                        return { ...prev, id: pid };
+                      });
+                    } else if (currentEvent === "chunk") {
+                      accumulatedText += payload.text;
+                      setSelectedProject(prev => {
+                        if (!prev) return null;
+                        return { ...prev, content: accumulatedText };
+                      });
+                    } else if (currentEvent === "done") {
+                      const finalContent = payload.content;
+                      setSelectedProject(prev => {
+                        if (!prev) return null;
+                        return { ...prev, content: finalContent };
+                      });
+                      fetchProjects();
+                    } else if (currentEvent === "error") {
+                      alert(`Stream error: ${payload.detail}`);
+                    }
+                  } catch (err) {
+                    console.error("JSON parse error on stream line:", line, err);
+                  }
+                }
+              }
+            }
+          } catch (streamReadErr) {
+            console.error("Error reading stream:", streamReadErr);
+          } finally {
+            fetchProjects();
+          }
+        } else {
+          const data = await res.json();
+          setTitle("");
+          setPrompt("");
+          setIsCreating(false);
+          setSelectedProject(data);
+          fetchProjects();
+        }
       } else if (res.status === 401) {
         handleLogout();
       } else {
@@ -757,19 +837,89 @@ export default function DashboardPage() {
     }
     if (isContinuing) return;
 
+    const isTextModel = !isAudioModelId(modelName) && !isImageModelId(modelName) && !isVideoModelId(modelName);
+    const streamParam = isTextModel ? "?stream=true" : "";
+
     setIsContinuing(true);
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    const promptText = continuePrompt;
+    setContinuePrompt("");
+    const prevContent = selectedProject.content || "";
+
     try {
-      const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/continue`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/continue${streamParam}`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify(toProjectContinueApiPayload({ prompt: continuePrompt, language, modelName: modelName.trim() })),
+        body: JSON.stringify(toProjectContinueApiPayload({ prompt: promptText, language, modelName: modelName.trim() })),
       });
       if (res.ok) {
-        const data = await res.json();
-        setSelectedProject(data);
-        setContinuePrompt("");
-        fetchProjects();
+        if (isTextModel) {
+          const reader = res.body?.getReader();
+          if (!reader) {
+            alert("Không thể đọc stream từ server.");
+            setIsContinuing(false);
+            return;
+          }
+
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let accumulatedText = "";
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
+
+              let currentEvent = "";
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                if (trimmed.startsWith("event:")) {
+                  currentEvent = trimmed.slice(6).trim();
+                } else if (trimmed.startsWith("data:")) {
+                  const dataStr = trimmed.slice(5).trim();
+                  try {
+                    const payload = JSON.parse(dataStr);
+                    if (currentEvent === "chunk") {
+                      accumulatedText += payload.text;
+                      setSelectedProject(prev => {
+                        if (!prev) return null;
+                        const userPromptChunk = `[[USER_PROMPT]]\n${promptText.trim()}`;
+                        const continuationChunk = `${userPromptChunk}\n\n---\n\n${accumulatedText}`;
+                        const baseContent = prevContent.trim();
+                        const fullContent = baseContent ? `${baseContent}\n\n---\n\n{continuationChunk}` : continuationChunk;
+                        // Replace standard brace pattern with actual value
+                        return { ...prev, content: fullContent.replace("{continuationChunk}", continuationChunk) };
+                      });
+                    } else if (currentEvent === "done") {
+                      const finalContent = payload.content;
+                      setSelectedProject(prev => {
+                        if (!prev) return null;
+                        return { ...prev, content: finalContent };
+                      });
+                      fetchProjects();
+                    } else if (currentEvent === "error") {
+                      alert(`Stream error: ${payload.detail}`);
+                    }
+                  } catch (err) {
+                    console.error("JSON parse error on stream line:", line, err);
+                  }
+                }
+              }
+            }
+          } catch (streamReadErr) {
+            console.error("Error reading stream:", streamReadErr);
+          } finally {
+            fetchProjects();
+          }
+        } else {
+          const data = await res.json();
+          setSelectedProject(data);
+          fetchProjects();
+        }
       } else if (res.status === 401) {
         handleLogout();
       } else {
@@ -783,9 +933,11 @@ export default function DashboardPage() {
           /* ignore */
         }
         alert(msg);
+        setContinuePrompt(promptText);
       }
     } catch (e) {
       console.error(e);
+      setContinuePrompt(promptText);
     } finally {
       setIsContinuing(false);
     }

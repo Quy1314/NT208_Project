@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 from typing import Any, List, cast
@@ -384,6 +385,107 @@ def generate_story_content(
     return generated_content
 
 
+def generate_story_content_stream(
+    title: str,
+    instruction: str,
+    previous_content: str = "",
+    language: str = "vietnamese",
+    recent_context: str = "",
+    model_name: str | None = None,
+    hf_api_key: str | None = None,
+    canon_context_pack: str | None = None,
+):
+    try:
+        from dotenv import find_dotenv
+        load_dotenv(find_dotenv(), override=True)
+        env_key = os.getenv("hf_key_read")
+        api_key = (hf_api_key or "").strip() or (env_key or "").strip()
+
+        if not api_key:
+            yield "Hệ thống chưa cấu hình Hugging Face API Key (hf_key_read). Thêm key tạm trong Personalize hoặc liên hệ Admin."
+            return
+
+        model_id = (model_name or "").strip() or "Qwen/Qwen2.5-72B-Instruct"
+
+        client = InferenceClient(token=api_key)
+        context_block = ""
+        if canon_context_pack is not None and canon_context_pack.strip():
+            context_block = canon_context_pack.strip() + "\n\n"
+        elif language == "english":
+            context_block = (
+                "Context from previous content (keep continuity and consistency):\n"
+                f"{previous_content[-2500:]}\n\n"
+            ) if previous_content.strip() else ""
+        else:
+            if previous_content.strip():
+                context_block = (
+                    "Ngữ cảnh nội dung trước đó (hãy giữ mạch văn và logic nhất quán):\n"
+                    f"{previous_content[-5000:]}\n\n"
+                )
+            if recent_context.strip():
+                context_block += (
+                    "Tóm tắt lịch sử các lượt trước (ưu tiên dùng để giữ continuity):\n"
+                    f"{recent_context}\n\n"
+                )
+
+        language_label = "vietnamese" if language == "vietnamese" else "english"
+        if language_label == "english":
+            prompt = (
+                f"Write the next part of this story in {language_label}.\n"
+                f"Title: {title}\n"
+                f"Current instruction: {instruction}\n\n"
+                f"{context_block}"
+                "New generated content:\n"
+            )
+            system_prompt = (
+                "You are a creative fiction writer. "
+                "Always respond in the selected language: english."
+            )
+        else:
+            prompt = (
+                f"Hãy viết tiếp nội dung truyện sáng tạo bằng {language_label}.\n"
+                f"Tiêu đề: {title}\n"
+                f"Yêu cầu hiện tại: {instruction}\n\n"
+                f"{context_block}"
+                "Ràng buộc bắt buộc:\n"
+                "- Chỉ dùng tiếng Việt, tuyệt đối không chèn câu tiếng Anh.\n"
+                "- Nếu có thuật ngữ riêng (Pokemon, Team Rocket, Gym), giữ nguyên tên riêng, còn lại viết tiếng Việt tự nhiên.\n"
+                "- Không mâu thuẫn với các sự kiện đã có ở chương trước.\n\n"
+                "Nội dung mới cần sinh:\n"
+            )
+            system_prompt = (
+                "Bạn là nhà văn chuyên sáng tác truyện hư cấu. "
+                "Luôn trả lời bằng đúng ngôn ngữ được chọn: vietnamese. "
+                "Tuyệt đối không dùng tiếng Anh cho câu mô tả hoặc hội thoại."
+            )
+
+        messages = [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {"role": "user", "content": prompt}
+        ]
+
+        response = client.chat_completion(
+            model=model_id,
+            messages=messages,
+            max_tokens=4096,
+            temperature=0.7,
+            stream=True
+        )
+
+        for chunk in response:
+            if chunk.choices:
+                text = chunk.choices[0].delta.content
+                if text:
+                    yield text
+
+    except Exception as e:
+        print(f"Lỗi khi gọi Hugging Face Streaming API: {e}")
+        yield f"Xin lỗi, quá trình sinh nội dung bằng Hugging Face bị gián đoạn: {str(e)}"
+
+
 def _sleep_seconds(value: float) -> None:
     if value > 0:
         time.sleep(value)
@@ -683,9 +785,10 @@ def get_all_projects(db: Session = Depends(get_db), current_user: models.User = 
     ]
 
 
-@router.post("/", response_model=models.ProjectResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 def create_project(
     data: models.ProjectCreateReq,
+    stream: bool = False,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
     x_hf_api_key: str | None = Header(None, alias="X-HF-Api-Key"),
@@ -735,67 +838,119 @@ def create_project(
         pack = None
         if canon_engine_enabled():
             pack = build_story_context_pack(db, pid, data.prompt, x_hf_api_key, project_content="")
-        generated_content = generate_story_content(
-            title=data.title,
-            instruction=data.prompt,
-            language=data.language,
-            model_name=data.model_name,
-            hf_api_key=x_hf_api_key,
-            canon_context_pack=pack,
+        
+        if stream:
+            def event_generator():
+                yield f"event: init\ndata: {json.dumps({'id': str(pid)})}\n\n"
+                generated_content = ""
+                try:
+                    for chunk in generate_story_content_stream(
+                        title=data.title,
+                        instruction=data.prompt,
+                        previous_content="",
+                        language=data.language,
+                        model_name=data.model_name,
+                        hf_api_key=x_hf_api_key,
+                        canon_context_pack=pack,
+                    ):
+                        generated_content += chunk
+                        yield f"event: chunk\ndata: {json.dumps({'text': chunk})}\n\n"
+                    
+                    proj = db.query(models.Project).filter(models.Project.id == pid).first()
+                    if proj:
+                        cast(Any, proj).content = generated_content
+                        db.commit()
+                        db.refresh(proj)
+
+                    db.add(
+                        models.ProjectContextEntry(
+                            project_id=pid,
+                            prompt=data.prompt,
+                            language=data.language,
+                            generated_content=generated_content,
+                        )
+                    )
+                    db.commit()
+
+                    if canon_engine_enabled() and scope:
+                        try:
+                            append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), generated_content, x_hf_api_key)
+                        except Exception as chunk_err:
+                            print(f"[WARN] lore chunk append failed: {chunk_err}")
+                except Exception as stream_err:
+                    print(f"[ERROR] Stream generator error: {stream_err}")
+                    proj = db.query(models.Project).filter(models.Project.id == pid).first()
+                    if proj and generated_content.strip():
+                        cast(Any, proj).content = generated_content
+                        db.commit()
+                    yield f"event: error\ndata: {json.dumps({'detail': str(stream_err)})}\n\n"
+                finally:
+                    yield f"event: done\ndata: {json.dumps({'content': generated_content})}\n\n"
+
+            return StreamingResponse(event_generator(), media_type="text/event-stream")
+        else:
+            generated_content = generate_story_content(
+                title=data.title,
+                instruction=data.prompt,
+                language=data.language,
+                model_name=data.model_name,
+                hf_api_key=x_hf_api_key,
+                canon_context_pack=pack,
+            )
+            if canon_engine_enabled():
+                try:
+                    append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), generated_content, x_hf_api_key)
+                except Exception as chunk_err:
+                    print(f"[WARN] lore chunk append failed: {chunk_err}")
+
+    if not stream:
+        cast(Any, new_project).content = generated_content
+        db.commit()
+        db.refresh(new_project)
+
+        db.add(
+            models.ProjectContextEntry(
+                project_id=pid,
+                prompt=data.prompt,
+                language=data.language,
+                generated_content=generated_content,
+            )
         )
-        if canon_engine_enabled():
+        db.commit()
+
+        # 3. Nếu là audio model, tự động generate audio từ content vừa sinh
+        if is_audio_model:
+            # Không để lỗi TTS làm fail toàn bộ thao tác tạo project.
             try:
-                append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), generated_content, x_hf_api_key)
-            except Exception as chunk_err:
-                print(f"[WARN] lore chunk append failed: {chunk_err}")
-
-    cast(Any, new_project).content = generated_content
-    db.commit()
-    db.refresh(new_project)
-
-    db.add(
-        models.ProjectContextEntry(
-            project_id=pid,
-            prompt=data.prompt,
-            language=data.language,
-            generated_content=generated_content,
-        )
-    )
-    db.commit()
-
-    # 3. Nếu là audio model, tự động generate audio từ content vừa sinh
-    if is_audio_model:
-        # Không để lỗi TTS làm fail toàn bộ thao tác tạo project.
-        try:
-            audio_bytes = generate_audio_from_text(
-                generated_content,
-                data.language,
-                fpt_api_key=x_fpt_api_key,
-            )
-            stored_bytes, ext = to_mp3_if_possible(audio_bytes)
-            audio_filename = f"audio_{new_project.id}_{int(time.time() * 1000)}.{ext}"
-            upload_dir = get_audio_upload_dir()
-            audio_path = os.path.join(upload_dir, audio_filename)
-            with open(audio_path, "wb") as f:
-                f.write(stored_bytes)
+                audio_bytes = generate_audio_from_text(
+                    generated_content,
+                    data.language,
+                    fpt_api_key=x_fpt_api_key,
+                )
+                stored_bytes, ext = to_mp3_if_possible(audio_bytes)
+                audio_filename = f"audio_{new_project.id}_{int(time.time() * 1000)}.{ext}"
+                upload_dir = get_audio_upload_dir()
+                audio_path = os.path.join(upload_dir, audio_filename)
+                with open(audio_path, "wb") as f:
+                    f.write(stored_bytes)
+                    
+                audio_web_path = f"/uploads/audio/{audio_filename}"
+                new_project_obj = cast(Any, new_project)
+                new_project_obj.content = f"{new_project_obj.content}\n\n---\n\n{audio_web_path}"
                 
-            audio_web_path = f"/uploads/audio/{audio_filename}"
-            new_project_obj = cast(Any, new_project)
-            new_project_obj.content = f"{new_project_obj.content}\n\n---\n\n{audio_web_path}"
-            
-            entry = db.query(models.ProjectContextEntry).filter(models.ProjectContextEntry.project_id == pid).order_by(models.ProjectContextEntry.created_at.desc()).first()
-            if entry:
-                cast(Any, entry).generated_content = new_project_obj.content
+                entry = db.query(models.ProjectContextEntry).filter(models.ProjectContextEntry.project_id == pid).order_by(models.ProjectContextEntry.created_at.desc()).first()
+                if entry:
+                    cast(Any, entry).generated_content = new_project_obj.content
 
-            audio_file = models.AudioFile(
-                project_id=new_project.id,
-                title=f"Audio for {new_project.title}",
-                audio_url=audio_web_path,
-            )
-            db.add(audio_file)
-            db.commit()
-        except Exception as audio_err:
-            print(f"[WARN] TTS auto-generation failed for project {new_project.id}: {audio_err}")
+                audio_file = models.AudioFile(
+                    project_id=new_project.id,
+                    title=f"Audio for {new_project.title}",
+                    audio_url=audio_web_path,
+                )
+                db.add(audio_file)
+                db.commit()
+            except Exception as audio_err:
+                print(f"[WARN] TTS auto-generation failed for project {new_project.id}: {audio_err}")
 
     new_project_obj = cast(Any, new_project)
     return models.ProjectResponse(
@@ -829,10 +984,11 @@ def translate_for_export(
     )
 
 
-@router.post("/{project_id}/continue", response_model=models.ProjectResponse)
+@router.post("/{project_id}/continue")
 def continue_project(
     project_id: str,
     data: models.ProjectContinueReq,
+    stream: bool = False,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
     x_hf_api_key: str | None = Header(None, alias="X-HF-Api-Key"),
@@ -902,42 +1058,113 @@ def continue_project(
         pack = None
         if canon_engine_enabled():
             pack = build_story_context_pack(db, pid, data.prompt, x_hf_api_key, project_content=project_content)
-        new_chunk = generate_story_content(
-            title=project_title,
-            instruction=data.prompt,
-            previous_content=project_content,
-            language=data.language,
-            recent_context="" if canon_engine_enabled() else recent_context,
-            model_name=data.model_name,
-            hf_api_key=x_hf_api_key,
-            canon_context_pack=pack if canon_engine_enabled() else None,
+        
+        if stream:
+            def event_generator():
+                yield f"event: init\ndata: {json.dumps({'id': str(pid)})}\n\n"
+                new_chunk = ""
+                try:
+                    for chunk in generate_story_content_stream(
+                        title=project_title,
+                        instruction=data.prompt,
+                        previous_content=project_content,
+                        language=data.language,
+                        recent_context="" if canon_engine_enabled() else recent_context,
+                        model_name=data.model_name,
+                        hf_api_key=x_hf_api_key,
+                        canon_context_pack=pack if canon_engine_enabled() else None,
+                    ):
+                        new_chunk += chunk
+                        yield f"event: chunk\ndata: {json.dumps({'text': chunk})}\n\n"
+
+                    user_prompt_chunk = f"[[USER_PROMPT]]\n{data.prompt.strip()}"
+                    continuation_chunk = f"{user_prompt_chunk}\n\n---\n\n{new_chunk}"
+                    
+                    proj = db.query(models.Project).filter(models.Project.id == pid).first()
+                    if proj:
+                        proj_obj = cast(Any, proj)
+                        base_content = str(proj_obj.content or "")
+                        if base_content and base_content.strip():
+                            proj_obj.content = f"{base_content.rstrip()}\n\n---\n\n{continuation_chunk}"
+                        else:
+                            proj_obj.content = continuation_chunk
+                        db.commit()
+                        db.refresh(proj)
+
+                    db.add(
+                        models.ProjectContextEntry(
+                            project_id=pid,
+                            prompt=data.prompt,
+                            language=data.language,
+                            generated_content=new_chunk,
+                        )
+                    )
+                    db.commit()
+
+                    if canon_engine_enabled() and scope:
+                        try:
+                            append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), new_chunk, x_hf_api_key)
+                        except Exception as chunk_err:
+                            print(f"[WARN] lore chunk append failed: {chunk_err}")
+                except Exception as stream_err:
+                    print(f"[ERROR] Stream generator error: {stream_err}")
+                    if new_chunk.strip():
+                        user_prompt_chunk = f"[[USER_PROMPT]]\n{data.prompt.strip()}"
+                        continuation_chunk = f"{user_prompt_chunk}\n\n---\n\n{new_chunk}"
+                        proj = db.query(models.Project).filter(models.Project.id == pid).first()
+                        if proj:
+                            proj_obj = cast(Any, proj)
+                            base_content = str(proj_obj.content or "")
+                            if base_content and base_content.strip():
+                                proj_obj.content = f"{base_content.rstrip()}\n\n---\n\n{continuation_chunk}"
+                            else:
+                                proj_obj.content = continuation_chunk
+                            db.commit()
+                    yield f"event: error\ndata: {json.dumps({'detail': str(stream_err)})}\n\n"
+                finally:
+                    proj = db.query(models.Project).filter(models.Project.id == pid).first()
+                    final_full_content = str(proj.content) if proj else ""
+                    yield f"event: done\ndata: {json.dumps({'content': final_full_content})}\n\n"
+
+            return StreamingResponse(event_generator(), media_type="text/event-stream")
+        else:
+            new_chunk = generate_story_content(
+                title=project_title,
+                instruction=data.prompt,
+                previous_content=project_content,
+                language=data.language,
+                recent_context="" if canon_engine_enabled() else recent_context,
+                model_name=data.model_name,
+                hf_api_key=x_hf_api_key,
+                canon_context_pack=pack if canon_engine_enabled() else None,
+            )
+            if canon_engine_enabled():
+                try:
+                    append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), new_chunk, x_hf_api_key)
+                except Exception as chunk_err:
+                    print(f"[WARN] lore chunk append failed: {chunk_err}")
+
+    if not stream:
+        project_obj = cast(Any, project)
+        user_prompt_chunk = f"[[USER_PROMPT]]\n{data.prompt.strip()}"
+        continuation_chunk = f"{user_prompt_chunk}\n\n---\n\n{new_chunk}"
+        if project_content and project_content.strip():
+            project_obj.content = f"{project_content.rstrip()}\n\n---\n\n{continuation_chunk}"
+        else:
+            project_obj.content = continuation_chunk
+
+        db.commit()
+        db.refresh(project)
+
+        db.add(
+            models.ProjectContextEntry(
+                project_id=cast(UUID, project_obj.id),
+                prompt=data.prompt,
+                language=data.language,
+                generated_content=new_chunk,
+            )
         )
-        if canon_engine_enabled():
-            try:
-                append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), new_chunk, x_hf_api_key)
-            except Exception as chunk_err:
-                print(f"[WARN] lore chunk append failed: {chunk_err}")
-
-    project_obj = cast(Any, project)
-    user_prompt_chunk = f"[[USER_PROMPT]]\n{data.prompt.strip()}"
-    continuation_chunk = f"{user_prompt_chunk}\n\n---\n\n{new_chunk}"
-    if project_content and project_content.strip():
-        project_obj.content = f"{project_content.rstrip()}\n\n---\n\n{continuation_chunk}"
-    else:
-        project_obj.content = continuation_chunk
-
-    db.commit()
-    db.refresh(project)
-
-    db.add(
-        models.ProjectContextEntry(
-            project_id=cast(UUID, project_obj.id),
-            prompt=data.prompt,
-            language=data.language,
-            generated_content=new_chunk,
-        )
-    )
-    db.commit()
+        db.commit()
 
     project_obj = cast(Any, project)
     return models.ProjectResponse(
