@@ -1002,11 +1002,13 @@ export default function DashboardPage() {
               <div className="space-y-3">
                 {m.assistantText && <p className="text-sm whitespace-pre-wrap opacity-90">{m.assistantText}</p>}
                 <video
-                  src={m.videoUrl}
                   controls
                   playsInline
+                  preload="auto"
                   className="w-full max-w-full rounded-xl border border-slate-200 max-h-[min(70vh,520px)] bg-black object-contain"
-                />
+                >
+                  <source src={m.videoUrl} type="video/mp4" />
+                </video>
               </div>
             )}
           </div>

@@ -214,14 +214,15 @@ export default function LandingPage() {
                 <div className="relative aspect-video bg-black">
                   {tpl.category === "video" ? (
                     <video
-                      src={tpl.previewUrl}
                       autoPlay
                       muted
                       loop
                       playsInline
-                      preload="metadata"
+                      preload="auto"
                       className="h-full w-full object-cover opacity-90 group-hover:opacity-100"
-                    />
+                    >
+                      <source src={tpl.previewUrl} type="video/mp4" />
+                    </video>
                   ) : (
                     <Image
                       src={tpl.previewUrl}
