@@ -28,40 +28,92 @@ def build_diffusion_recipe(
         if isinstance(pack.get("trigger_tokens"), list):
             style_tokens += ", " + ", ".join(pack["trigger_tokens"])
 
-    parts: list[str] = []
-    parts.append(style_tokens.strip())
+    # Natural descriptive prose compiler optimized for FLUX models
+    is_flux = "flux" in image_model_id.lower()
+    
+    if is_flux:
+        # Build natural descriptive prose paragraph
+        prose_parts = []
+        
+        # Style prefixes first
+        if style_tokens:
+            prose_parts.append(style_tokens.strip())
+            
+        # Camera & framing
+        camera_frame = f"A {scene.lc.camera} showing a character."
+        prose_parts.append(camera_frame)
+        
+        # Character appearance and their active action/pose
+        for ch in scene.characters:
+            char_desc = ""
+            if ch.appearance_notes:
+                # Clean up any potential json structures or tags
+                desc = ch.appearance_notes.strip()
+                if desc.lower().startswith("kaelen is ") or desc.lower().startswith("eldrin is "):
+                    char_desc = desc
+                else:
+                    char_desc = f"The character {ch.slug} is a wizard/rogue: {desc}."
+            else:
+                char_desc = f"A character named {ch.slug}."
+                
+            if ch.action:
+                action_text = ch.action.strip()
+                # Ensure correct verb agreement or casing
+                if action_text.lower().startswith("kaelen ") or action_text.lower().startswith("eldrin "):
+                    char_desc += f" Currently, {action_text}."
+                else:
+                    char_desc += f" Currently, the character is {action_text}."
+            
+            if ch.emotion:
+                char_desc += f" The character has a {ch.emotion} facial expression."
+                
+            prose_parts.append(char_desc)
 
-    for ch in scene.characters:
-        bits = []
-        if ch.action:
-            bits.append(ch.action)
-        bits.append(f"character {ch.slug}")
-        bits.append(f"outfit variant {ch.outfit.label}")
-        if ch.appearance_notes:
-            bits.append(f"appearance: {ch.appearance_notes}")
-        if ch.emotion:
-            bits.append(f"emotion {ch.emotion}")
-        parts.append("; ".join(bits))
+        # Environmental setting
+        loc = scene.environment
+        loc_name = loc.display_name or loc.location_slug.replace("_", " ")
+        env_desc = f"The setting is a {loc_name} during the {loc.time_of_day or 'golden hour'}."
+        if scene.lc.lighting:
+            env_desc += f" The scene features {scene.lc.lighting}."
+        prose_parts.append(env_desc)
 
-    parts.append(scene.lc.camera)
-    parts.append(scene.lc.lighting)
-    parts.append(f"mood: {scene.lc.emotional_tone}")
+        positive = " ".join(p for p in prose_parts if p)
+    else:
+        # Legacy structured prompt formatting
+        parts: list[str] = []
+        parts.append(style_tokens.strip())
 
-    loc = scene.environment
-    loc_bits = [loc.display_name or loc.location_slug.replace("_", " ")]
-    loc_bits.append(loc.time_of_day or "")
-    if loc.weather:
-        loc_bits.append(loc.weather)
-    parts.append("environment: " + ", ".join(x for x in loc_bits if x))
+        for ch in scene.characters:
+            bits = []
+            if ch.action:
+                bits.append(ch.action)
+            bits.append(f"character {ch.slug}")
+            bits.append(f"outfit variant {ch.outfit.label}")
+            if ch.appearance_notes:
+                bits.append(f"appearance: {ch.appearance_notes}")
+            if ch.emotion:
+                bits.append(f"emotion {ch.emotion}")
+            parts.append("; ".join(bits))
 
-    if scene.creatures:
-        crew = []
-        for c in scene.creatures:
-            label = c.nickname or c.species_key
-            crew.append(f"{label} ({c.species_key}, evolution stage {c.stage_key})")
-        parts.append("party Pokemon present EXACTLY (do not add or replace): " + "; ".join(crew))
+        parts.append(scene.lc.camera)
+        parts.append(scene.lc.lighting)
+        parts.append(f"mood: {scene.lc.emotional_tone}")
 
-    positive = ". ".join(p for p in parts if p)
+        loc = scene.environment
+        loc_bits = [loc.display_name or loc.location_slug.replace("_", " ")]
+        loc_bits.append(loc.time_of_day or "")
+        if loc.weather:
+            loc_bits.append(loc.weather)
+        parts.append("environment: " + ", ".join(x for x in loc_bits if x))
+
+        if scene.creatures:
+            crew = []
+            for c in scene.creatures:
+                label = c.nickname or c.species_key
+                crew.append(f"{label} ({c.species_key}, evolution stage {c.stage_key})")
+            parts.append("party Pokemon present EXACTLY (do not add or replace): " + "; ".join(crew))
+
+        positive = ". ".join(p for p in parts if p)
 
     negative = (
         vb_neg
