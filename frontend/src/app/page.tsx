@@ -972,11 +972,13 @@ export default function DashboardPage() {
                         return { ...prev, content: accumulatedText };
                       });
                     } else if (currentEvent === "done") {
-                      const finalContent = payload.content;
-                      setSelectedProject(prev => {
-                        if (!prev) return null;
-                        return { ...prev, content: finalContent };
-                      });
+                      const finalContent = typeof payload.content === "string" ? payload.content : null;
+                      if (finalContent !== null) {
+                        setSelectedProject(prev => {
+                          if (!prev) return null;
+                          return { ...prev, content: finalContent };
+                        });
+                      }
                       fetchProjects();
                     } else if (currentEvent === "error") {
                       alert(`Stream error: ${payload.detail}`);
