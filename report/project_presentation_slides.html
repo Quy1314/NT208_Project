@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Content Generator Platform - Presentation Slides</title>
+    <!-- Reveal.js CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reset.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
+    <!-- Dracula theme for a dark premium look -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/dracula.min.css" id="theme">
+    <!-- Highlight.js for code syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/highlight/monokai.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Outfit:wght@400;600;800&family=Fira+Code&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --r-main-font: 'Inter', sans-serif;
+        --r-heading-font: 'Outfit', sans-serif;
+        --r-heading-color: #50fa7b;
+        --r-link-color: #8be9fd;
+        --r-link-color-hover: #ff79c6;
+      }
+      .reveal h1, .reveal h2, .reveal h3, .reveal h4, .reveal h5, .reveal h6 {
+        font-family: 'Outfit', sans-serif;
+        font-weight: 800;
+        text-transform: none;
+        letter-spacing: -0.02em;
+        text-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      }
+      .reveal h1 {
+        color: #ff79c6;
+      }
+      .reveal h2 {
+        color: #8be9fd;
+      }
+      .reveal p, .reveal li {
+        font-family: 'Inter', sans-serif;
+        font-size: 0.85em;
+        line-height: 1.6;
+        color: #f8f8f2;
+      }
+      .reveal li {
+        margin-bottom: 8px;
+      }
+      .reveal pre code {
+        font-family: 'Fira Code', monospace;
+        border-radius: 8px;
+      }
+      /* Table styling */
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 20px 0;
+        font-size: 0.55em !important;
+      }
+      th, td {
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        padding: 10px 12px !important;
+        text-align: left;
+      }
+      th {
+        background-color: rgba(255, 255, 255, 0.08);
+        font-weight: bold;
+        color: #50fa7b !important;
+      }
+      /* Mermaid Styling */
+      .mermaid {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: rgba(0, 0, 0, 0.3) !important;
+        padding: 15px;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        margin: 0 auto;
+        max-width: 90%;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      }
+      .mermaid svg {
+        max-height: 480px;
+        width: auto;
+      }
+      /* Custom styles for Lead class */
+      .reveal section.lead h1 {
+        font-size: 2.2em;
+        margin-bottom: 20px;
+        background: linear-gradient(135deg, #ff79c6 0%, #bd93f9 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      .reveal section.lead h2 {
+        font-size: 1.1em;
+        color: #f8f8f2;
+        opacity: 0.9;
+      }
+      .reveal strong {
+        color: #ffb86c;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <section data-markdown data-separator="^---$" data-separator-vertical="^\n\n$">
+          <textarea data-template>
+<!-- _class: lead -->
+# 🚀 AI CONTENT GENERATOR PLATFORM
+## Hệ Thống Sáng Tác Nội Dung Đa Phương Tiện Nhất Quán (NT208)
+
+**Thành viên thực hiện:** [Tên Nhóm]  
+**Môn học:** Phát Triển Ứng Dụng Web (NT208)
+
+---
+
+## 👥 1. Đối Tượng Sử Dụng Mục Tiêu (Target Users)
+
+*   **✍️ Nhà văn, tác giả tự do (Indie Writers / Novelists):**
+    *   Sáng tác tiểu thuyết mạng, truyện dài kỳ.
+    *   Cần độ nhất quán cao về cốt truyện, nhân vật qua hàng chục chương.
+*   **🎬 Người sáng tác nội dung video (Content Creators):**
+    *   TikTokers, YouTubers làm video kể chuyện, hoạt hình ngắn.
+    *   Tích hợp nhanh: Kịch bản ➡️ Giọng đọc ➡️ Ảnh minh họa ➡️ Phân cảnh video.
+*   **🎨 Biên kịch truyện tranh & Webtoon:**
+    *   Viết kịch bản phân cảnh, lời thoại cho họa sĩ minh họa.
+    *   Tạo ảnh phác thảo (Concept Art) định hướng hình ảnh.
+*   **🎮 Nhà phát triển game độc lập (Indie Game Devs):**
+    *   Xây dựng cốt truyện nền (Lore), lời thoại cho lượng lớn nhân vật/NPC.
+
+---
+
+## 🎯 2. Nhu Cầu Cốt Lõi & Giải Pháp (User Needs)
+
+| Vấn đề của người dùng (Pain Points) | Giải pháp của Hệ thống (Our Solutions) |
+| :--- | :--- |
+| **Mất nhất quán cốt truyện** <br> (AI phổ thông bị trôi ngữ cảnh khi viết dài) | **Engine Độc Lập & RAG** <br> Quản lý Canon Scope (Lore Chunks) để ghi nhớ nhân vật/bối cảnh dài hạn. |
+| **Quy trình rời rạc** <br> (Phải dùng riêng lẻ ChatGPT, Midjourney, TTS...) | **Workspace Đa Phương Tiện Tích Hợp** <br> Viết text, sinh ảnh, phát âm thanh và video trong 1 cửa sổ. |
+| **Quản lý hội thoại lộn xộn** <br> (Dạng chat dài không có cấu trúc dự án) | **Quản lý theo Dự án (Project-Based)** <br> Lưu trữ dạng Project, quản lý lịch sử thông minh. |
+| **Hợp tác đội nhóm thủ công** <br> (Chia sẻ tài liệu qua file text rời rạc) | **Không gian cộng tác nhóm (Teams)** <br> Chia sẻ tài nguyên và dùng chung API Key trong nhóm. |
+
+---
+
+## 💡 3. Các Tính Năng Core Hệ Thống (Key Features)
+
+*   **📝 Creative Writing Engine (Text):**
+    *   Viết kịch bản/truyện dài kỳ đa ngôn ngữ (Việt/Anh).
+    *   Streaming nội dung thời gian thực.
+*   **🖼️ Concept Art Generator (Image):**
+    *   Tạo hình ảnh nhân vật, bối cảnh với FLUX.1 & Stable Diffusion.
+*   **🔊 Text-to-Speech (Audio):**
+    *   Chuyển đổi kịch bản thành giọng đọc truyền cảm bằng FPT AI TTS v5.
+*   **🎥 Scene Generator (Video):**
+    *   Tạo phân cảnh video ngắn chuyển động mượt mà từ prompt qua Fal/Kling.
+*   **🏷️ Auto-Naming & Video Saving:**
+    *   Tự động đặt tên dự án bằng AI thông minh (thay thế "AI Template Draft").
+    *   Lưu trữ lịch sử chat video, phát lại và tiếp tục sinh video trên dự án cũ.
+
+---
+
+## 🛠️ 4. Kiến Trúc Kỹ Thuật (System Architecture)
+
+```mermaid
+graph TD
+    Client[React / Next.js SPA] <--> |REST API & Stream SSE| API[FastAPI Web Server]
+    API <--> |SQLAlchemy ORM| DB[(PostgreSQL / SQLite)]
+    API --> |Story Grounding Context| RAG[Canon Scope Engine]
+    API --> |External AI Services| HF[Hugging Face Inference API]
+    API --> |TTS API| FPT[FPT AI Voice Cloud]
+    API --> |Video API| Fal[Fal AI / Kling AI SDK]
+```
+
+---
+
+## 🛠️ 4b. Cấu Trúc Tương Tác Tổng Quát (Interaction Flow)
+
+*   **🔄 Đồng bộ hóa & Luồng giao tiếp chính:**
+    *   **Client ➡️ Server:** Dùng HTTP REST API (đăng nhập, quản lý project/team, cập nhật metadata) & Server-Sent Events (SSE) để stream nội dung chữ dài từ LLM.
+    *   **Server ➡️ DB:** Sử dụng SQLAlchemy ORM để truy vấn và lưu giữ tài nguyên.
+    *   **Server ➡️ AI Engines:** Hoạt động như một Gateway Điều Phối (Orchestrator). Nhận yêu cầu từ người dùng, làm giàu ngữ cảnh (context enrichment) rồi gửi tiếp đến bên thứ ba.
+*   **💾 Quản lý trạng thái ở Frontend:**
+    *   Lưu giữ JWT Token tại Local Storage/Session Storage để giữ phiên làm việc.
+    *   Phân tích cú pháp trạng thái (ví dụ: chuyển project content thành chat thread video/audio) để cập nhật UI phản hồi tương ứng mà không cần reload trang.
+
+---
+
+## 🔄 4c. Luồng Hoạt Động Chi Tiết (Activity Flow)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Người dùng
+    participant UI as Giao diện Web (Next.js)
+    participant API as FastAPI Backend
+    participant DB as Database
+    participant AI as Dịch vụ AI (Hugging Face/Fal/FPT)
+
+    User->>UI: Nhập Prompt & nhấn gửi
+    UI->>API: Gửi yêu cầu sinh nội dung (Token + Payload)
+    API->>DB: Truy vấn Canon Scope & Ngữ cảnh lịch sử (RAG)
+    DB-->>API: Trả về Lore Chunks phù hợp
+    API->>API: Đóng gói & làm giàu Prompt
+    API->>AI: Gọi API sinh (Text/Image/Audio/Video)
+    AI-->>API: Trả về kết quả (Text Stream/URL)
+    API->>DB: Lưu trữ nội dung mới vào Project.content
+    API-->>UI: Stream/Trả kết quả hoàn chỉnh về Client
+    UI->>User: Cập nhật Sidebar & Hiển thị trên Workspace
+```
+
+---
+
+## 💻 5. Công Nghệ Sử Dụng (Technology Stack)
+
+*   **Frontend (Ứng dụng Web):**
+    *   **Core:** React 19, Next.js 16 (App Router).
+    *   **Styling & UI:** TailwindCSS, Tailwind Merge, Lucide Icons, Shadcn UI.
+*   **Backend (Máy chủ dịch vụ API):**
+    *   **Framework:** Python FastAPI.
+    *   **Database & ORM:** PostgreSQL/SQLite, SQLAlchemy ORM.
+*   **Tích hợp AI Models:**
+    *   **Text LLM:** Qwen/Qwen2.5-72B-Instruct, Llama (qua HF Inference Client).
+    *   **Image:** black-forest-labs/FLUX.1-schnell, Stability AI SDXL.
+    *   **Audio:** FPT TTS AI v5 Engine.
+    *   **Video:** fal-ai/minimax-video, Kling AI.
+
+---
+
+## 🌟 6. Điểm Nhấn Sáng Tạo (What Makes Us Unique?)
+
+1.  **Tính nhất quán tuyệt đối nhờ RAG (Retrieval-Augmented Generation):**
+    *   Hệ thống không chỉ gửi prompt đơn thuần mà tự động truy vấn Lore Chunks từ cơ sở dữ liệu để đóng gói ngữ cảnh đầy đủ nhất gửi tới LLM.
+2.  **Trải nghiệm người dùng cao cấp (Premium UI/UX):**
+    *   Thiết kế Dark/Light mode hiện đại, bo góc mềm mại, các hiệu ứng glassmorphism thời thượng.
+    *   Trình soạn thảo composer gọn gàng hỗ trợ upload file tài liệu đính kèm và nhận diện giọng nói (Speech-to-Text).
+3.  **Tự động hóa thông minh (Automated Smart Helpers):**
+    *   Nút "Tự đặt tên" gọi LLM tóm tắt nhanh prompt của người dùng thành tên dự án ngắn gọn (2-4 từ).
+
+---
+
+<!-- _class: lead -->
+# Thank You!
+## 📧 Q&A - Hỏi đáp về hệ thống
+          </textarea>
+        </section>
+      </div>
+    </div>
+
+    <!-- Reveal.js JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/markdown/markdown.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/highlight/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/notes/notes.min.js"></script>
+    <!-- Mermaid.js for diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    
+    <script>
+      // Initialize Reveal.js
+      Reveal.initialize({
+        hash: true,
+        plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ],
+        markdown: {
+          smartypants: true
+        }
+      }).then(() => {
+        // Convert all code.language-mermaid to div.mermaid
+        document.querySelectorAll('pre code.language-mermaid').forEach((codeBlock) => {
+          const pre = codeBlock.parentNode;
+          const div = document.createElement('div');
+          div.className = 'mermaid';
+          div.textContent = codeBlock.textContent;
+          pre.parentNode.replaceChild(div, pre);
+        });
+
+        // Initialize Mermaid
+        mermaid.initialize({
+          theme: 'dark',
+          startOnLoad: false,
+          securityLevel: 'loose'
+        });
+        
+        const renderMermaid = () => {
+          const currentSlide = Reveal.getCurrentSlide();
+          const mermaidElements = currentSlide.querySelectorAll('.mermaid:not([data-processed])');
+          mermaidElements.forEach((el) => {
+            const id = 'mermaid-' + Math.random().toString(36).substr(2, 9);
+            const txt = el.textContent || el.innerText;
+            el.innerHTML = '';
+            mermaid.render(id, txt).then(({ svg }) => {
+              el.innerHTML = svg;
+              el.setAttribute('data-processed', 'true');
+            });
+          });
+        };
+
+        // Render on start
+        renderMermaid();
+        // Render on slide changes
+        Reveal.on('slidechanged', renderMermaid);
+      });
+    </script>
+  </body>
+</html>
