@@ -34,6 +34,11 @@ def run_canon_image_pipeline(
     if not scope:
         return "", {"error": "no_canon_scope"}
 
+    if not hf_api_key or not hf_api_key.strip():
+        from dotenv import find_dotenv, load_dotenv
+        load_dotenv(find_dotenv(), override=True)
+        hf_api_key = os.getenv("hf_key_read")
+
     scene = compile_scene_graph(db, scope, intent, hf_api_key)
     rep = validate_scene_against_db(db, scene)
     meta: dict = {"violations": rep.violations, "scene_label": scene.scene_label, "repair_rounds": 0}
