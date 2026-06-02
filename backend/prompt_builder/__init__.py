@@ -32,50 +32,74 @@ def build_diffusion_recipe(
     is_flux = "flux" in image_model_id.lower()
     
     if is_flux:
-        # Build natural descriptive prose paragraph
+        # Build natural descriptive prose paragraph with unified subject-first grammatical structure
         prose_parts = []
         
-        # Style prefixes first
-        if style_tokens:
-            prose_parts.append(style_tokens.strip())
-            
-        # Camera & framing
-        camera_frame = f"A {scene.lc.camera} showing a character."
-        prose_parts.append(camera_frame)
-        
-        # Character appearance and their active action/pose
+        # 1. Main character appearance and outfit descriptions first (Subject)
         for ch in scene.characters:
-            char_desc = ""
+            # Extract the appearance description
+            appearance_desc = ""
             if ch.appearance_notes:
-                # Clean up any potential json structures or tags
                 desc = ch.appearance_notes.strip()
-                if desc.lower().startswith("kaelen is ") or desc.lower().startswith("eldrin is "):
-                    char_desc = desc
-                else:
-                    char_desc = f"The character {ch.slug} is a wizard/rogue: {desc}."
+                # Remove "Kaelen is " or "Eldrin is " prefix to make it a descriptive clause
+                lower_desc = desc.lower()
+                prefix_to_remove = f"{ch.slug.lower()} is "
+                if lower_desc.startswith(prefix_to_remove):
+                    desc = desc[len(prefix_to_remove):].strip()
+                appearance_desc = desc
+                if appearance_desc.endswith("."):
+                    appearance_desc = appearance_desc[:-1].strip()
+                
+            # Camera and composition introduction at the subject level
+            char_name = ch.slug.capitalize()
+            cam_str = f"A cinematic {scene.lc.camera} of {char_name}"
+            if appearance_desc:
+                char_clause = f"{cam_str}, who is {appearance_desc}."
             else:
-                char_desc = f"A character named {ch.slug}."
+                char_clause = f"{cam_str}."
                 
-            if ch.action:
-                action_text = ch.action.strip()
-                # Ensure correct verb agreement or casing
-                if action_text.lower().startswith("kaelen ") or action_text.lower().startswith("eldrin "):
-                    char_desc += f" Currently, {action_text}."
-                else:
-                    char_desc += f" Currently, the character is {action_text}."
+            # Bind character action
+            action_text = ch.action.strip() if ch.action else f"{char_name} standing still"
+            action_clause = action_text
+            lower_action = action_clause.lower()
+            name_lower = char_name.lower()
+            slug_lower = ch.slug.lower()
             
+            if lower_action.startswith(name_lower):
+                action_clause = f"In this scene, {action_text}"
+            elif lower_action.startswith(slug_lower):
+                action_clause = f"In this scene, {action_text}"
+            else:
+                if lower_action.startswith("is ") or lower_action.startswith("are "):
+                    action_clause = f"In this scene, {char_name} {action_text}"
+                else:
+                    action_clause = f"In this scene, {char_name} is {action_text}"
+                    
             if ch.emotion:
-                char_desc += f" The character has a {ch.emotion} facial expression."
-                
-            prose_parts.append(char_desc)
+                action_clause += f", with a {ch.emotion} expression"
+            action_clause += "."
+            
+            prose_parts.append(char_clause)
+            prose_parts.append(action_clause)
 
-        # Environmental setting
+        # 2. Environmental setting and lighting
         loc = scene.environment
         loc_name = loc.display_name or loc.location_slug.replace("_", " ")
-        env_desc = f"The setting is a {loc_name} during the {loc.time_of_day or 'golden hour'}."
+        if loc_name.lower() == "unspecified":
+            env_desc = f"The scene takes place during the {loc.time_of_day or 'golden hour'}"
+        else:
+            env_desc = f"The setting is {loc_name} during the {loc.time_of_day or 'golden hour'}"
+            
         if scene.lc.lighting:
-            env_desc += f" The scene features {scene.lc.lighting}."
+            env_desc += f", with {scene.lc.lighting}."
+        else:
+            env_desc += "."
+            
         prose_parts.append(env_desc)
+
+        # 3. Style suffixes appended at the very end
+        if style_tokens:
+            prose_parts.append(style_tokens.strip())
 
         positive = " ".join(p for p in prose_parts if p)
     else:
