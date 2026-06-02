@@ -69,6 +69,44 @@ graph TD
     API --> |Video API| Fal[Fal AI / Kling AI SDK]
 ```
 
+
+---
+
+## 🛠️ 4b. Cấu Trúc Tương Tác Tổng Quát (Interaction Flow)
+
+*   **🔄 Đồng bộ hóa & Luồng giao tiếp chính:**
+    *   **Client ➡️ Server:** Dùng HTTP REST API (đăng nhập, quản lý project/team, cập nhật metadata) & Server-Sent Events (SSE) để stream nội dung chữ dài từ LLM.
+    *   **Server ➡️ DB:** Sử dụng SQLAlchemy ORM để truy vấn và lưu giữ tài nguyên.
+    *   **Server ➡️ AI Engines:** Hoạt động như một Gateway Điều Phối (Orchestrator). Nhận yêu cầu từ người dùng, làm giàu ngữ cảnh (context enrichment) rồi gửi tiếp đến bên thứ ba.
+*   **💾 Quản lý trạng thái ở Frontend:**
+    *   Lưu giữ JWT Token tại Local Storage/Session Storage để giữ phiên làm việc.
+    *   Phân tích cú pháp trạng thái (ví dụ: chuyển project content thành chat thread video/audio) để cập nhật UI phản hồi tương ứng mà không cần reload trang.
+
+---
+
+## 🔄 4c. Luồng Hoạt Động Chi Tiết (Activity Flow)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Người dùng
+    participant UI as Giao diện Web (Next.js)
+    participant API as FastAPI Backend
+    participant DB as Database
+    participant AI as Dịch vụ AI (Hugging Face/Fal/FPT)
+
+    User->>UI: Nhập Prompt & nhấn gửi
+    UI->>API: Gửi yêu cầu sinh nội dung (Token + Payload)
+    API->>DB: Truy vấn Canon Scope & Ngữ cảnh lịch sử (RAG)
+    DB-->>API: Trả về Lore Chunks phù hợp
+    API->>API: Đóng gói & làm giàu Prompt
+    API->>AI: Gọi API sinh (Text/Image/Audio/Video)
+    AI-->>API: Trả về kết quả (Text Stream/URL)
+    API->>DB: Lưu trữ nội dung mới vào Project.content
+    API-->>UI: Stream/Trả kết quả hoàn chỉnh về Client
+    UI->>User: Cập nhật Sidebar & Hiển thị trên Workspace
+```
+
 ---
 
 ## 💻 5. Công Nghệ Sử Dụng (Technology Stack)
