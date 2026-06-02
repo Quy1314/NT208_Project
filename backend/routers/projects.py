@@ -34,13 +34,8 @@ FPT_TTS_MODEL = "fpt-ai-tts-v5"
 # Text-to-image qua Hugging Face Inference (router); khớp dropdown frontend.
 HF_IMAGE_MODELS = frozenset(
     {
-        "black-forest-labs/FLUX.1-dev",
         "black-forest-labs/FLUX.1-schnell",
         "stabilityai/stable-diffusion-xl-base-1.0",
-        "runwayml/stable-diffusion-v1-5",
-        "Lykon/DreamShaper",
-        "SG161222/Realistic_Vision_V6.0_B1_noVAE",
-        "prompthero/openjourney",
     }
 )
 HF_TRANSLATION_URLS_BY_MODE = {
@@ -741,7 +736,7 @@ def create_project(
         generated_content = _extract_tts_text(data.prompt)
     elif is_image_model:
         ensure_canon_scope(db, pid)
-        mid = (data.model_name or "").strip() or "runwayml/stable-diffusion-v1-5"
+        mid = (data.model_name or "").strip() or "black-forest-labs/FLUX.1-schnell"
         if canon_engine_enabled() and project_has_canon_characters(db, pid):
             out, _meta = run_canon_image_pipeline(db, pid, data.prompt, mid, x_hf_api_key)
             generated_content = (
@@ -963,7 +958,7 @@ def continue_project(
 
     elif is_image_model:
         ensure_canon_scope(db, pid)
-        mid = (data.model_name or "").strip() or "runwayml/stable-diffusion-v1-5"
+        mid = (data.model_name or "").strip() or "black-forest-labs/FLUX.1-schnell"
         if canon_engine_enabled() and project_has_canon_characters(db, pid):
             out, _meta = run_canon_image_pipeline(db, pid, data.prompt, mid, x_hf_api_key)
             new_chunk = (
