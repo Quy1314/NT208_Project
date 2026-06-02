@@ -119,7 +119,7 @@ def compile_scene_graph(
     outfit_summary = vv.outfit_summary
     variant_id = vv.id
     marks = vv.face_marks_json or []
-    appearance_notes = json.dumps(marks) if marks else outfit_summary[:200]
+    appearance_notes = json.dumps(marks) if marks else outfit_summary
 
     party_rows = cq.get_party_rows(db, ch.id)
     creatures: list[SceneCreature] = []
@@ -162,7 +162,7 @@ def compile_scene_graph(
         environment=env,
         lc=LightingCamera(
             lighting="cinematic rim light, volumetric haze",
-            camera="wide establishing shot, rule of thirds",
+            camera="medium shot, character-focused composition",
             emotional_tone="epic",
         ),
     )

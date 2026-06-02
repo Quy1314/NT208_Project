@@ -30,16 +30,6 @@ def build_diffusion_recipe(
 
     parts: list[str] = []
     parts.append(style_tokens.strip())
-    parts.append(scene.lc.camera)
-    parts.append(scene.lc.lighting)
-    parts.append(f"mood: {scene.lc.emotional_tone}")
-
-    loc = scene.environment
-    loc_bits = [loc.display_name or loc.location_slug.replace("_", " ")]
-    loc_bits.append(loc.time_of_day or "")
-    if loc.weather:
-        loc_bits.append(loc.weather)
-    parts.append("environment: " + ", ".join(x for x in loc_bits if x))
 
     for ch in scene.characters:
         bits = [
@@ -51,6 +41,17 @@ def build_diffusion_recipe(
         if ch.emotion:
             bits.append(f"emotion {ch.emotion}")
         parts.append("; ".join(bits))
+
+    parts.append(scene.lc.camera)
+    parts.append(scene.lc.lighting)
+    parts.append(f"mood: {scene.lc.emotional_tone}")
+
+    loc = scene.environment
+    loc_bits = [loc.display_name or loc.location_slug.replace("_", " ")]
+    loc_bits.append(loc.time_of_day or "")
+    if loc.weather:
+        loc_bits.append(loc.weather)
+    parts.append("environment: " + ", ".join(x for x in loc_bits if x))
 
     if scene.creatures:
         crew = []
