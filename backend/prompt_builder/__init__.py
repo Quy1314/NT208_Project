@@ -32,10 +32,11 @@ def build_diffusion_recipe(
     parts.append(style_tokens.strip())
 
     for ch in scene.characters:
-        bits = [
-            f"character {ch.slug}",
-            f"outfit variant {ch.outfit.label}",
-        ]
+        bits = []
+        if ch.action:
+            bits.append(ch.action)
+        bits.append(f"character {ch.slug}")
+        bits.append(f"outfit variant {ch.outfit.label}")
         if ch.appearance_notes:
             bits.append(f"appearance: {ch.appearance_notes}")
         if ch.emotion:
