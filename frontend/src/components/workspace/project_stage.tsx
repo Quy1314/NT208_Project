@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useState, useEffect, useRef } from "react";
 import { FileDown, Plus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { API_BASE_URL } from "@/lib/api";
@@ -19,9 +20,55 @@ type ProjectStageProps = {
   onOpenExport: () => void;
   onDeleteSelectedProject: () => void;
   onStartCreating: () => void;
+  isStreaming?: boolean;
 };
 
-function renderGeneratedContent(content: string, isDark: boolean) {
+interface TypewriterTextProps {
+  text: string;
+  isStreaming: boolean;
+}
+
+function TypewriterText({ text, isStreaming }: TypewriterTextProps) {
+  const [displayedText, setDisplayedText] = useState("");
+  const textRef = useRef(text);
+  const indexRef = useRef(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Handle typing effect when streaming is active
+  useEffect(() => {
+    if (!isStreaming) return;
+
+    textRef.current = text;
+
+    // Start a timer to append characters if we are behind text
+    if (!timerRef.current) {
+      timerRef.current = setInterval(() => {
+        const currentTarget = textRef.current;
+        const remaining = currentTarget.length - indexRef.current;
+        if (remaining > 0) {
+          // If we are lagging far behind (e.g. > 100 chars), type faster
+          const speed = remaining > 100 ? 6 : remaining > 30 ? 3 : 2;
+          const charsToType = Math.min(speed, remaining);
+          indexRef.current += charsToType;
+          setDisplayedText(currentTarget.slice(0, indexRef.current));
+        }
+      }, 15); // every 15ms
+    }
+  }, [text, isStreaming]);
+
+  // Clean up interval on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  return <>{isStreaming ? displayedText : text}</>;
+}
+
+function renderGeneratedContent(content: string, isDark: boolean, isStreaming: boolean = false) {
   if (!content || content === "Waiting for LLM generation...") {
     return (
       <div className="flex items-center gap-2 text-slate-400 animate-pulse">
@@ -38,6 +85,9 @@ function renderGeneratedContent(content: string, isDark: boolean) {
   return (
     <div className="space-y-4">
       {segments.map((seg, i) => {
+        const isLast = i === segments.length - 1;
+        const isStreamingSegment = isLast && isStreaming;
+
         if (seg.startsWith("data:image/")) {
           return (
             // eslint-disable-next-line @next/next/no-img-element -- HF trả về data URL inline
@@ -89,7 +139,11 @@ function renderGeneratedContent(content: string, isDark: boolean) {
               <span className="font-bold text-sm">Nội dung AI đã tạo</span>
             </div>
             <p className="whitespace-pre-wrap leading-relaxed">
-              {seg}
+              {isStreamingSegment ? (
+                <TypewriterText text={seg} isStreaming={isStreaming} />
+              ) : (
+                seg
+              )}
             </p>
           </div>
         );
@@ -106,6 +160,7 @@ export default function ProjectStage({
   onOpenExport,
   onDeleteSelectedProject,
   onStartCreating,
+  isStreaming = false,
 }: ProjectStageProps) {
   if (selectedProject) {
     return (
@@ -145,7 +200,7 @@ export default function ProjectStage({
         </div>
 
         <div className="mb-8 space-y-4">
-          {renderGeneratedContent(selectedProject.content, isDark)}
+          {renderGeneratedContent(selectedProject.content, isDark, isStreaming)}
         </div>
       </div>
     );

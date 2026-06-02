@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import os
 import uuid
-
+import abc
+from datetime import datetime
+from typing import Any
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from lore.db_models import CanonScope, LoreChunk, LORE_EMBEDDING_DIM
-from retrieval.chunker import chunk_text
+from retrieval.chunker import chunk_text, chunk_text_rag
 from retrieval.embedder import embed_query, embed_texts
 
 TOP_K_DEFAULT = 8
@@ -24,6 +26,94 @@ def _cosine_sim(a: list[float], b: list[float]) -> float:
     if na == 0 or nb == 0:
         return 0.0
     return dot / (na * nb)
+
+
+class VectorStoreInterface(abc.ABC):
+    @abc.abstractmethod
+    def add_chunks(
+        self,
+        db: Session,
+        scope_id: uuid.UUID,
+        chunks: list[str],
+        metadata_list: list[dict[str, Any]],
+        hf_api_key: str | None
+    ) -> int:
+        pass
+
+    @abc.abstractmethod
+    def search(
+        self,
+        db: Session,
+        scope_id: uuid.UUID,
+        query: str,
+        hf_api_key: str | None,
+        top_k: int = 6
+    ) -> list[dict[str, Any]]:
+        pass
+
+
+class LocalDBVectorStore(VectorStoreInterface):
+    def add_chunks(
+        self,
+        db: Session,
+        scope_id: uuid.UUID,
+        chunks: list[str],
+        metadata_list: list[dict[str, Any]],
+        hf_api_key: str | None
+    ) -> int:
+        if not chunks:
+            return 0
+        vectors = embed_texts(chunks, hf_api_key)
+        
+        max_idx_row = db.query(LoreChunk.chunk_index).filter(LoreChunk.scope_id == scope_id).order_by(LoreChunk.chunk_index.desc()).first()
+        start_idx = (max_idx_row[0] + 1) if max_idx_row else 0
+
+        for i, (chunk, vec) in enumerate(zip(chunks, vectors)):
+            meta = metadata_list[i] if i < len(metadata_list) else {}
+            db.add(
+                LoreChunk(
+                    scope_id=scope_id,
+                    chapter_no=meta.get("chapter_no"),
+                    chunk_index=start_idx + i,
+                    text=chunk,
+                    embedding=vec,
+                    entity_ids=meta,  # Storing full metadata dictionary in JSONB column
+                    source=meta.get("source", "story_segment"),
+                )
+            )
+        db.commit()
+        return len(chunks)
+
+    def search(
+        self,
+        db: Session,
+        scope_id: uuid.UUID,
+        query: str,
+        hf_api_key: str | None,
+        top_k: int = 6
+    ) -> list[dict[str, Any]]:
+        qvec = embed_query(query, hf_api_key)
+        rows = (
+            db.query(LoreChunk)
+            .filter(LoreChunk.scope_id == scope_id, LoreChunk.embedding.isnot(None))
+            .limit(500)
+            .all()
+        )
+        scored: list[dict[str, Any]] = []
+        for row in rows:
+            vec = [float(x) for x in (row.embedding or [])]
+            if len(vec) != len(qvec):
+                continue
+            scored.append({
+                "text": row.text,
+                "score": _cosine_sim(qvec, vec),
+                "metadata": row.entity_ids
+            })
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        return scored[:top_k]
+
+
+vector_store: VectorStoreInterface = LocalDBVectorStore()
 
 
 def get_scope_for_project(db: Session, project_id: uuid.UUID) -> CanonScope | None:
@@ -105,30 +195,58 @@ def semantic_search_chunks(
     return scored[:top_k]
 
 
+def detect_characters_in_text(db: Session, scope_id: uuid.UUID, text: str) -> list[str]:
+    from lore.db_models import CanonCharacter
+    try:
+        characters = db.query(CanonCharacter).filter(CanonCharacter.scope_id == scope_id).all()
+        detected = []
+        text_lower = text.lower()
+        for char in characters:
+            slug = (char.slug or "").lower()
+            name = (char.display_name or "").lower()
+            if (slug and slug in text_lower) or (name and name in text_lower):
+                detected.append(char.display_name)
+        return list(set(detected))
+    except Exception as e:
+        print(f"[WARN] Error detecting characters: {e}")
+        return []
+
+
 def append_chunks_for_new_segment(
     db: Session,
     scope_id: uuid.UUID,
     segment: str,
     hf_api_key: str | None,
+    *,
+    role: str = "assistant",
+    message_id: uuid.UUID | None = None,
+    chapter_no: int | None = None,
+    source: str = "story_segment"
 ) -> int:
-    """Sau khi viết tiếp truyện, chỉ embed segment mới và append row."""
-    pieces = chunk_text(segment or "", max_chars=int(os.getenv("CANON_CHUNK_CHARS", "900")))
+    """Sau khi viết tiếp truyện, chỉ embed segment mới và append row với metadata đầy đủ."""
+    cleaned = (segment or "").strip()
+    if not cleaned or len(cleaned) < 20 or cleaned == "Waiting for LLM generation...":
+        return 0
+
+    pieces = chunk_text_rag(cleaned, max_chars=3000, overlap=400)
     if not pieces:
         return 0
-    max_idx_row = db.query(LoreChunk.chunk_index).filter(LoreChunk.scope_id == scope_id).order_by(LoreChunk.chunk_index.desc()).first()
-    start_idx = (max_idx_row[0] + 1) if max_idx_row else 0
-    vectors = embed_texts(pieces, hf_api_key)
-    for i, (chunk, vec) in enumerate(zip(pieces, vectors)):
-        db.add(
-            LoreChunk(
-                scope_id=scope_id,
-                chapter_no=None,
-                chunk_index=start_idx + i,
-                text=chunk,
-                embedding=vec,
-                entity_ids=[],
-                source="story_segment",
-            )
-        )
-    db.commit()
-    return len(pieces)
+
+    character_names = detect_characters_in_text(db, scope_id, cleaned)
+    
+    metadata_list = []
+    for _ in pieces:
+        metadata_list.append({
+            "role": role,
+            "character_names": character_names,
+            "message_id": str(message_id) if message_id else None,
+            "created_at": datetime.utcnow().isoformat(),
+            "chapter_no": chapter_no,
+            "source": source
+        })
+
+    try:
+        return vector_store.add_chunks(db, scope_id, pieces, metadata_list, hf_api_key)
+    except Exception as e:
+        print(f"[ERROR] failed to add chunks to vector store: {e}")
+        return 0

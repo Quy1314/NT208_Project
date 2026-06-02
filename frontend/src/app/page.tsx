@@ -71,6 +71,38 @@ interface VideoChatMessage {
   loading?: boolean;
 }
 
+type SpeechRecognitionResultListLike = {
+  readonly length: number;
+  [index: number]: SpeechRecognitionResult;
+};
+
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionResultEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+type SpeechRecognitionWindow = Window & {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+};
+
+interface SpeechRecognitionResultEventLike {
+  results: SpeechRecognitionResultListLike;
+}
+
+interface SpeechRecognitionErrorEventLike {
+  error: string;
+}
+
 const VIDEO_CONTEXT_MAX_CHARS = 12000;
 
 /** Build optional project/chat grounding for video generation (server merges into the fal prompt). */
@@ -400,7 +432,7 @@ export default function DashboardPage() {
   const [title, setTitle] = useState("");
   const userMenuRef = useRef<HTMLDivElement>(null);
   const mainScrollRef = useRef<HTMLElement | null>(null);
-  const [isMainAtBottom, setIsMainAtBottom] = useState(true);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
@@ -444,7 +476,7 @@ export default function DashboardPage() {
   const [attachedFileContent, setAttachedFileContent] = useState<string>("");
   const [isRecording, setIsRecording] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -479,7 +511,9 @@ export default function DashboardPage() {
   };
 
   const toggleSpeechRecognition = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition =
+      (window as SpeechRecognitionWindow).SpeechRecognition ||
+      (window as SpeechRecognitionWindow).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert("Trình duyệt của bạn không hỗ trợ nhận diện giọng nói (Speech Recognition). Hãy thử trên Chrome hoặc Edge.");
       return;
@@ -498,7 +532,7 @@ export default function DashboardPage() {
         setIsRecording(true);
       };
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionResultEventLike) => {
         const transcript = event.results[event.results.length - 1][0].transcript;
         if (selectedProject) {
           setContinuePrompt(prev => prev + (prev ? " " : "") + transcript);
@@ -507,7 +541,7 @@ export default function DashboardPage() {
         }
       };
 
-      recognition.onerror = (event: any) => {
+      recognition.onerror = (event: SpeechRecognitionErrorEventLike) => {
         console.error("Speech recognition error:", event.error);
         setIsRecording(false);
       };
@@ -679,9 +713,9 @@ export default function DashboardPage() {
   const updateMainBottomFlag = React.useCallback(() => {
     const el = mainScrollRef.current;
     if (!el) return;
-    const thresholdPx = 80;
+    const thresholdPx = 140;
     const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setIsMainAtBottom(gap <= thresholdPx);
+    return gap <= thresholdPx;
   }, []);
 
   useEffect(() => {
@@ -702,6 +736,26 @@ export default function DashboardPage() {
       ro.disconnect();
     };
   }, [isCreating, selectedProject, selectedProject?.content, videoMessages, updateMainBottomFlag]);
+
+  // Auto-scroll logic when streaming
+  const isScrollingRef = useRef(false);
+  useEffect(() => {
+    const el = mainScrollRef.current;
+    if (!el || (!isGenerating && !isContinuing && !isGeneratingVideo)) return;
+
+    // Check if near bottom
+    const thresholdPx = 140;
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const isNearBottom = gap <= thresholdPx;
+
+    if (isNearBottom && !isScrollingRef.current) {
+      isScrollingRef.current = true;
+      requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        isScrollingRef.current = false;
+      });
+    }
+  }, [selectedProject?.content, videoMessages, isGenerating, isContinuing, isGeneratingVideo]);
 
   const handleSelectProject = async (id: string) => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
@@ -1535,8 +1589,10 @@ export default function DashboardPage() {
                   setIsCreating(true);
                   setVideoMessages([]);
                 }}
+                isStreaming={isGenerating || isContinuing}
               />
             )}
+            <div ref={bottomRef} className="h-0 w-0" />
           </main>
 
           <WorkspaceComposerDock

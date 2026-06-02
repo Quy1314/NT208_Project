@@ -18,8 +18,6 @@ from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
 from PIL import Image as PILImage
 
-from pydantic import BaseModel # Kept existing
-
 import models
 from database import get_db
 from services.audio_pipeline import generate_audio_from_text, get_audio_upload_dir, to_mp3_if_possible
@@ -28,7 +26,7 @@ from auth import get_current_user
 from image_pipeline.pipeline import canon_engine_enabled, run_canon_image_pipeline
 from retrieval.service import append_chunks_for_new_segment, ensure_canon_scope
 from services.canon_queries import project_has_canon_characters
-from story_engine.context_pack import build_story_context_pack
+from story_engine.context_pack import build_story_context_pack, build_context_messages
 
 # Tạo Router cho group API liên quan đến Dự án, có prefix là /api/projects
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
@@ -217,7 +215,7 @@ def generate_image_content(
             img = PILImage.open(buf)
             img.verify()
         except Exception:
-            raise RuntimeError(f"API response is not a valid image. Details: {res.content[:200]}")
+            raise RuntimeError(f"API response is not a valid image. Details: {res.content[:200]!r}")
 
         b64 = base64.b64encode(res.content).decode("ascii")
         return f"data:image/png;base64,{b64}"
@@ -234,11 +232,11 @@ def generate_image_content(
 
 
 def generate_story_content(
+    db: Session,
+    project_id: UUID,
     title: str,
     instruction: str,
-    previous_content: str = "",
     language: str = "vietnamese",
-    recent_context: str = "",
     model_name: str | None = None,
     hf_api_key: str | None = None,
     canon_context_pack: str | None = None,
@@ -256,56 +254,30 @@ def generate_story_content(
         model_id = (model_name or "").strip() or "Qwen/Qwen2.5-72B-Instruct"
 
         client = InferenceClient(token=api_key)
-        context_block = ""
-        if canon_context_pack is not None and canon_context_pack.strip():
-            context_block = canon_context_pack.strip() + "\n\n"
-        elif language == "english":
-            context_block = (
-                "Context from previous content (keep continuity and consistency):\n"
-                f"{previous_content[-2500:]}\n\n"
-            ) if previous_content.strip() else ""
-        else:
-            if previous_content.strip():
-                context_block = (
-                    "Ngữ cảnh nội dung trước đó (hãy giữ mạch văn và logic nhất quán):\n"
-                    f"{previous_content[-5000:]}\n\n"
-                )
-            if recent_context.strip():
-                context_block += (
-                    "Tóm tắt lịch sử các lượt trước (ưu tiên dùng để giữ continuity):\n"
-                    f"{recent_context}\n\n"
-                )
 
         language_label = "vietnamese" if language == "vietnamese" else "english"
         if language_label == "english":
-            prompt = (
-                f"Write the next part of this story in {language_label}.\n"
-                f"Title: {title}\n"
-                f"Current instruction: {instruction}\n\n"
-                f"{context_block}"
-                "New generated content:\n"
-            )
             system_prompt = (
                 "You are a creative fiction writer. "
                 "Always respond in the selected language: english."
             )
         else:
-            prompt = (
-                f"Hãy viết tiếp nội dung truyện sáng tạo bằng {language_label}.\n"
-                f"Tiêu đề: {title}\n"
-                f"Yêu cầu hiện tại: {instruction}\n\n"
-                f"{context_block}"
-                "Ràng buộc bắt buộc:\n"
-                "- Chỉ dùng tiếng Việt, tuyệt đối không chèn câu tiếng Anh.\n"
-                "- Nếu có thuật ngữ riêng (Pokemon, Team Rocket, Gym), giữ nguyên tên riêng, còn lại viết tiếng Việt tự nhiên.\n"
-                "- Không mâu thuẫn với các sự kiện đã có ở chương trước.\n\n"
-                "Nội dung mới cần sinh:\n"
-            )
             system_prompt = (
                 "Bạn là nhà văn chuyên sáng tác truyện hư cấu. "
                 "Luôn trả lời bằng đúng ngôn ngữ được chọn: vietnamese. "
                 "Tuyệt đối không dùng tiếng Anh cho câu mô tả hoặc hội thoại."
             )
+
+        messages = build_context_messages(
+            db=db,
+            project_id=project_id,
+            system_prompt=system_prompt,
+            title=title,
+            latest_user_message=instruction,
+            language=language,
+            hf_api_key=api_key,
+            canon_context_pack=canon_context_pack
+        )
 
         max_retries = 15
         max_tokens_per_call = 4096
@@ -313,14 +285,6 @@ def generate_story_content(
 
         for attempt in range(max_retries):
             try:
-                messages = [
-                    {
-                        "role": "system",
-                        "content": system_prompt,
-                    },
-                    {"role": "user", "content": prompt}
-                ]
-
                 response = client.chat_completion(
                     model=model_id,
                     messages=messages,
@@ -386,11 +350,11 @@ def generate_story_content(
 
 
 def generate_story_content_stream(
+    db: Session,
+    project_id: UUID,
     title: str,
     instruction: str,
-    previous_content: str = "",
     language: str = "vietnamese",
-    recent_context: str = "",
     model_name: str | None = None,
     hf_api_key: str | None = None,
     canon_context_pack: str | None = None,
@@ -408,64 +372,30 @@ def generate_story_content_stream(
         model_id = (model_name or "").strip() or "Qwen/Qwen2.5-72B-Instruct"
 
         client = InferenceClient(token=api_key)
-        context_block = ""
-        if canon_context_pack is not None and canon_context_pack.strip():
-            context_block = canon_context_pack.strip() + "\n\n"
-        elif language == "english":
-            context_block = (
-                "Context from previous content (keep continuity and consistency):\n"
-                f"{previous_content[-2500:]}\n\n"
-            ) if previous_content.strip() else ""
-        else:
-            if previous_content.strip():
-                context_block = (
-                    "Ngữ cảnh nội dung trước đó (hãy giữ mạch văn và logic nhất quán):\n"
-                    f"{previous_content[-5000:]}\n\n"
-                )
-            if recent_context.strip():
-                context_block += (
-                    "Tóm tắt lịch sử các lượt trước (ưu tiên dùng để giữ continuity):\n"
-                    f"{recent_context}\n\n"
-                )
 
         language_label = "vietnamese" if language == "vietnamese" else "english"
         if language_label == "english":
-            prompt = (
-                f"Write the next part of this story in {language_label}.\n"
-                f"Title: {title}\n"
-                f"Current instruction: {instruction}\n\n"
-                f"{context_block}"
-                "New generated content:\n"
-            )
             system_prompt = (
                 "You are a creative fiction writer. "
                 "Always respond in the selected language: english."
             )
         else:
-            prompt = (
-                f"Hãy viết tiếp nội dung truyện sáng tạo bằng {language_label}.\n"
-                f"Tiêu đề: {title}\n"
-                f"Yêu cầu hiện tại: {instruction}\n\n"
-                f"{context_block}"
-                "Ràng buộc bắt buộc:\n"
-                "- Chỉ dùng tiếng Việt, tuyệt đối không chèn câu tiếng Anh.\n"
-                "- Nếu có thuật ngữ riêng (Pokemon, Team Rocket, Gym), giữ nguyên tên riêng, còn lại viết tiếng Việt tự nhiên.\n"
-                "- Không mâu thuẫn với các sự kiện đã có ở chương trước.\n\n"
-                "Nội dung mới cần sinh:\n"
-            )
             system_prompt = (
                 "Bạn là nhà văn chuyên sáng tác truyện hư cấu. "
                 "Luôn trả lời bằng đúng ngôn ngữ được chọn: vietnamese. "
                 "Tuyệt đối không dùng tiếng Anh cho câu mô tả hoặc hội thoại."
             )
 
-        messages = [
-            {
-                "role": "system",
-                "content": system_prompt,
-            },
-            {"role": "user", "content": prompt}
-        ]
+        messages = build_context_messages(
+            db=db,
+            project_id=project_id,
+            system_prompt=system_prompt,
+            title=title,
+            latest_user_message=instruction,
+            language=language,
+            hf_api_key=api_key,
+            canon_context_pack=canon_context_pack
+        )
 
         response = client.chat_completion(
             model=model_id,
@@ -629,7 +559,6 @@ def _translate_text_via_hf(text: str, mode: str, api_key: str) -> str:
             "Authorization": f"Bearer {api_key}",
         }
         candidate_endpoints = HF_TRANSLATION_URLS_BY_MODE.get(mode, HF_TRANSLATION_URLS_BY_MODE["vi-to-en"])
-        last_error_detail = "Hugging Face translation failed."
 
         translated_this_chunk = False
         for endpoint in candidate_endpoints:
@@ -653,7 +582,6 @@ def _translate_text_via_hf(text: str, mode: str, api_key: str) -> str:
                         if translated is not None and translated.strip():
                             candidate_text = _normalize_whitespace(translated)
                             if _looks_like_low_quality_translation(chunk, candidate_text) or _is_unexpected_language_artifact(mode, candidate_text):
-                                last_error_detail = "Chất lượng dịch không ổn định, hệ thống sẽ thử lại."
                                 if attempt < max_retries - 1:
                                     _sleep_seconds(1.0)
                                     continue
@@ -664,7 +592,6 @@ def _translate_text_via_hf(text: str, mode: str, api_key: str) -> str:
                         if attempt < max_retries - 1:
                             _sleep_seconds(1.2)
                             continue
-                        last_error_detail = "Hugging Face trả response translation không hợp lệ."
                         break
                 except HTTPError as e:
                     raw = e.read().decode("utf-8") if e.fp else ""
@@ -683,19 +610,16 @@ def _translate_text_via_hf(text: str, mode: str, api_key: str) -> str:
                             wait_seconds = max(wait_seconds, float(estimated))
                         _sleep_seconds(wait_seconds)
                         continue
-                    last_error_detail = err_text or f"Hugging Face translation lỗi HTTP {e.code}."
                     break
-                except URLError as e:
+                except URLError:
                     if attempt < max_retries - 1:
                         _sleep_seconds(1.5)
                         continue
-                    last_error_detail = f"Không kết nối được Hugging Face: {str(e.reason)}"
                     break
                 except (TimeoutError, socket.timeout):
                     if attempt < max_retries - 1:
                         _sleep_seconds(2.0)
                         continue
-                    last_error_detail = "Hugging Face phản hồi quá chậm (timeout)."
                     break
             if translated_this_chunk:
                 break
@@ -712,7 +636,6 @@ def _translate_text_via_hf(text: str, mode: str, api_key: str) -> str:
                     continue
 
                 mini_translated = False
-                mini_error = "Hugging Face translation failed."
                 for endpoint in candidate_endpoints:
                     for attempt in range(2):
                         endpoint_body = {
@@ -735,7 +658,6 @@ def _translate_text_via_hf(text: str, mode: str, api_key: str) -> str:
                                 if translated:
                                     candidate_text = _normalize_whitespace(translated)
                                     if _looks_like_low_quality_translation(mini, candidate_text) or _is_unexpected_language_artifact(mode, candidate_text):
-                                        mini_error = "Chất lượng dịch không ổn định."
                                         if attempt == 0:
                                             _sleep_seconds(0.8)
                                             continue
@@ -743,8 +665,7 @@ def _translate_text_via_hf(text: str, mode: str, api_key: str) -> str:
                                     mini_results.append(candidate_text)
                                     mini_translated = True
                                     break
-                        except (HTTPError, URLError, TimeoutError, socket.timeout) as e:
-                            mini_error = str(e)
+                        except (HTTPError, URLError, TimeoutError, socket.timeout):
                             if attempt == 0:
                                 _sleep_seconds(0.9)
                                 continue
@@ -753,7 +674,6 @@ def _translate_text_via_hf(text: str, mode: str, api_key: str) -> str:
 
                 if not mini_translated:
                     mini_ok = False
-                    last_error_detail = mini_error
                     break
 
             if mini_ok and mini_results:
@@ -845,9 +765,10 @@ def create_project(
                 generated_content = ""
                 try:
                     for chunk in generate_story_content_stream(
+                        db=db,
+                        project_id=pid,
                         title=data.title,
                         instruction=data.prompt,
-                        previous_content="",
                         language=data.language,
                         model_name=data.model_name,
                         hf_api_key=x_hf_api_key,
@@ -872,7 +793,7 @@ def create_project(
                     )
                     db.commit()
 
-                    if canon_engine_enabled() and scope:
+                    if scope:
                         try:
                             append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), generated_content, x_hf_api_key)
                         except Exception as chunk_err:
@@ -890,6 +811,8 @@ def create_project(
             return StreamingResponse(event_generator(), media_type="text/event-stream")
         else:
             generated_content = generate_story_content(
+                db=db,
+                project_id=pid,
                 title=data.title,
                 instruction=data.prompt,
                 language=data.language,
@@ -897,7 +820,7 @@ def create_project(
                 hf_api_key=x_hf_api_key,
                 canon_context_pack=pack,
             )
-            if canon_engine_enabled():
+            if scope:
                 try:
                     append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), generated_content, x_hf_api_key)
                 except Exception as chunk_err:
@@ -1001,7 +924,6 @@ def continue_project(
     if project.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập Project này.")
 
-    recent_context = _build_recent_context(db, pid)
     audio_models = [FPT_TTS_MODEL]
     is_audio_model = data.model_name and data.model_name in audio_models
     is_image_model = bool(data.model_name and data.model_name in HF_IMAGE_MODELS)
@@ -1065,11 +987,11 @@ def continue_project(
                 new_chunk = ""
                 try:
                     for chunk in generate_story_content_stream(
+                        db=db,
+                        project_id=pid,
                         title=project_title,
                         instruction=data.prompt,
-                        previous_content=project_content,
                         language=data.language,
-                        recent_context="" if canon_engine_enabled() else recent_context,
                         model_name=data.model_name,
                         hf_api_key=x_hf_api_key,
                         canon_context_pack=pack if canon_engine_enabled() else None,
@@ -1101,7 +1023,7 @@ def continue_project(
                     )
                     db.commit()
 
-                    if canon_engine_enabled() and scope:
+                    if scope:
                         try:
                             append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), new_chunk, x_hf_api_key)
                         except Exception as chunk_err:
@@ -1129,16 +1051,16 @@ def continue_project(
             return StreamingResponse(event_generator(), media_type="text/event-stream")
         else:
             new_chunk = generate_story_content(
+                db=db,
+                project_id=pid,
                 title=project_title,
                 instruction=data.prompt,
-                previous_content=project_content,
                 language=data.language,
-                recent_context="" if canon_engine_enabled() else recent_context,
                 model_name=data.model_name,
                 hf_api_key=x_hf_api_key,
                 canon_context_pack=pack if canon_engine_enabled() else None,
             )
-            if canon_engine_enabled():
+            if scope:
                 try:
                     append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), new_chunk, x_hf_api_key)
                 except Exception as chunk_err:
