@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { API_BASE_URL } from "@/lib/api";
@@ -276,6 +276,7 @@ function WorkspaceComposerDock({
           : "bg-white border-slate-200 shadow-slate-200/50"
       }`}>
         <Textarea
+          data-testid="workspace-composer-input"
           value={selectedProject ? continuePrompt : prompt}
           onChange={(e) => (selectedProject ? setContinuePrompt(e.target.value) : setPrompt(e.target.value))}
           placeholder={placeholderText}
@@ -389,6 +390,7 @@ function WorkspaceComposerDock({
             </Button>
 
             <Button
+              data-testid="workspace-submit-button"
               onClick={onSubmit}
               disabled={isBusy}
               className={`ml-2 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all shadow-md cursor-pointer ${
@@ -436,6 +438,7 @@ export default function DashboardPage() {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const hasSelectedProject = Boolean(selectedProject);
   const [isCreating, setIsCreating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isContinuing, setIsContinuing] = useState(false);
@@ -575,7 +578,7 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     if (!token || token === "undefined" || token === "null") return;
     try {
@@ -591,9 +594,9 @@ export default function DashboardPage() {
     } catch (e) {
       console.error("Failed to fetch projects", e);
     }
-  };
+  }, []);
 
-  const fetchTeams = async () => {
+  const fetchTeams = useCallback(async () => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     if (!token) return;
     try {
@@ -603,12 +606,12 @@ export default function DashboardPage() {
       if (res.ok) {
         const data = await res.json();
         setTeams(data);
-        if (!selectedTeamId && data.length > 0) setSelectedTeamId(data[0].id);
+        setSelectedTeamId((current) => current || data[0]?.id || "");
       }
     } catch (e) {
       console.error("Failed to fetch teams", e);
     }
-  };
+  }, []);
 
   useEffect(() => {
     setPersonalHfKeyActive(Boolean(getPersonalHfApiKey()));
@@ -694,7 +697,7 @@ export default function DashboardPage() {
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [router]);
+  }, [router, fetchProjects, fetchTeams]);
 
   const toggleTheme = () => {
     setIsDark((prev) => {
@@ -710,16 +713,20 @@ export default function DashboardPage() {
     }
   }, [isProjectSettingsOpen, selectedProject, selectedTeamId]);
 
+  const mainWasNearBottomRef = useRef(true);
+
   const updateMainBottomFlag = React.useCallback(() => {
     const el = mainScrollRef.current;
-    if (!el) return;
+    if (!el) return true;
     const thresholdPx = 140;
     const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
-    return gap <= thresholdPx;
+    const isNearBottom = gap <= thresholdPx;
+    mainWasNearBottomRef.current = isNearBottom;
+    return isNearBottom;
   }, []);
 
   useEffect(() => {
-    const showComposer = isCreating || Boolean(selectedProject);
+    const showComposer = isCreating || hasSelectedProject;
     if (!showComposer) return;
 
     const el = mainScrollRef.current;
@@ -728,34 +735,27 @@ export default function DashboardPage() {
     updateMainBottomFlag();
     const onScroll = () => updateMainBottomFlag();
     el.addEventListener("scroll", onScroll, { passive: true });
-    const ro = new ResizeObserver(() => updateMainBottomFlag());
-    ro.observe(el);
 
     return () => {
       el.removeEventListener("scroll", onScroll);
-      ro.disconnect();
     };
-  }, [isCreating, selectedProject, selectedProject?.content, videoMessages, updateMainBottomFlag]);
+  }, [isCreating, hasSelectedProject, updateMainBottomFlag]);
 
   // Auto-scroll logic when streaming
   const isScrollingRef = useRef(false);
   useEffect(() => {
     const el = mainScrollRef.current;
-    if (!el || (!isGenerating && !isContinuing && !isGeneratingVideo)) return;
+    if (!el) return;
 
-    // Check if near bottom
-    const thresholdPx = 140;
-    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const isNearBottom = gap <= thresholdPx;
-
-    if (isNearBottom && !isScrollingRef.current) {
+    if (mainWasNearBottomRef.current && !isScrollingRef.current) {
       isScrollingRef.current = true;
       requestAnimationFrame(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        el.scrollTop = el.scrollHeight;
+        mainWasNearBottomRef.current = true;
         isScrollingRef.current = false;
       });
     }
-  }, [selectedProject?.content, videoMessages, isGenerating, isContinuing, isGeneratingVideo]);
+  }, [selectedProject?.content, videoMessages]);
 
   const handleSelectProject = async (id: string) => {
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
@@ -1093,11 +1093,13 @@ export default function DashboardPage() {
                         return { ...prev, content: fullContent.replace("{continuationChunk}", continuationChunk) };
                       });
                     } else if (currentEvent === "done") {
-                      const finalContent = payload.content;
-                      setSelectedProject(prev => {
-                        if (!prev) return null;
-                        return { ...prev, content: finalContent };
-                      });
+                      const finalContent = typeof payload.content === "string" ? payload.content : null;
+                      if (finalContent !== null) {
+                        setSelectedProject(prev => {
+                          if (!prev) return null;
+                          return { ...prev, content: finalContent };
+                        });
+                      }
                       fetchProjects();
                     } else if (currentEvent === "error") {
                       alert(`Stream error: ${payload.detail}`);
@@ -1367,8 +1369,6 @@ export default function DashboardPage() {
     </div>
   );
 
-  const showVideoStage = isVideoModel && (isCreating || selectedProject);
-
   return (
     <div className={`flex h-screen p-2 sm:p-4 font-sans transition-colors duration-300 ${isDark ? "gravity-surface bg-[#040812] text-slate-100" : "bg-slate-100 text-slate-900"}`}>
       <div
@@ -1517,6 +1517,7 @@ export default function DashboardPage() {
 
           <main
             ref={mainScrollRef}
+            data-testid="workspace-scroll-container"
             className="flex-1 overflow-y-auto px-4 pb-8"
           >
             {isVideoModel && selectedProject ? (
@@ -1592,7 +1593,7 @@ export default function DashboardPage() {
                 isStreaming={isGenerating || isContinuing}
               />
             )}
-            <div ref={bottomRef} className="h-0 w-0" />
+            <div ref={bottomRef} data-testid="workspace-scroll-bottom" className="h-0 w-0" />
           </main>
 
           <WorkspaceComposerDock
