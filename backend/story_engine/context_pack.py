@@ -2,13 +2,33 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 import uuid
 
 from sqlalchemy.orm import Session
 
 from retrieval.service import ensure_canon_scope, semantic_search_chunks
 from services.canon_queries import format_structured_context_pack
+
+logger = logging.getLogger(__name__)
+
+
+def estimate_tokens(text: str) -> int:
+    """Approximate token count without adding tokenizer dependencies."""
+    if not text:
+        return 0
+    return max(1, (len(text) + 3) // 4)
+
+
+def _truncate_to_token_budget(text: str, max_tokens: int) -> str:
+    if max_tokens <= 0:
+        return "[truncated for context budget]"
+    if estimate_tokens(text) <= max_tokens:
+        return text
+    max_chars = max(0, max_tokens * 4 - len("\n[truncated for context budget]"))
+    return text[:max_chars].rstrip() + "\n[truncated for context budget]"
 
 
 def build_story_context_pack(
@@ -58,7 +78,8 @@ def build_context_messages(
     hf_api_key: str | None,
     n_recent: int = 12,
     top_k: int = 6,
-    canon_context_pack: str | None = None
+    canon_context_pack: str | None = None,
+    max_context_tokens: int | None = None,
 ) -> list[dict[str, str]]:
     """Xây dựng danh sách messages được tối ưu hóa ngữ cảnh (sliding window + RAG)."""
     import models
@@ -78,6 +99,7 @@ def build_context_messages(
     # 2. Vector search lấy topK chunks liên quan đến query
     scope = ensure_canon_scope(db, project_id)
     retrieved_chunks = []
+    retrieval_started = time.perf_counter()
     try:
         hits = vector_store.search(db, scope.id, latest_user_message, hf_api_key, top_k=top_k)
         for hit in hits:
@@ -85,7 +107,11 @@ def build_context_messages(
             if txt.strip():
                 retrieved_chunks.append(txt.strip())
     except Exception as e:
-        print(f"[WARN] build_context_messages semantic search failed: {e}")
+        logger.warning(
+            "build_context_messages semantic_search_failed error_type=%s",
+            type(e).__name__,
+        )
+    retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
 
     retrieved_context_text = "\n---\n".join(retrieved_chunks) if retrieved_chunks else "(none)"
 
@@ -136,5 +162,28 @@ def build_context_messages(
         )
 
     messages.append({"role": "user", "content": user_content})
+
+    if max_context_tokens is not None:
+        total_tokens = estimate_tokens("\n".join(message["content"] for message in messages))
+        if total_tokens > max_context_tokens:
+            overflow = total_tokens - max_context_tokens
+            rag_message = next(
+                (message for message in messages if message["content"].startswith("Relevant long-term context:\n")),
+                None,
+            )
+            if rag_message is not None:
+                rag_prefix = "Relevant long-term context:\n"
+                rag_body = rag_message["content"][len(rag_prefix):]
+                rag_budget = max(0, estimate_tokens(rag_body) - overflow)
+                rag_message["content"] = rag_prefix + _truncate_to_token_budget(rag_body, rag_budget)
+
+    logger.info(
+        "build_context_messages retrieval_ms=%.2f retrieved_chunks=%d recent_messages=%d total_tokens=%d max_context_tokens=%s",
+        retrieval_ms,
+        len(retrieved_chunks),
+        len(recent_messages),
+        estimate_tokens("\n".join(message["content"] for message in messages)),
+        max_context_tokens,
+    )
 
     return messages
