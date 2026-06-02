@@ -1149,6 +1149,63 @@ def get_project_contexts(project_id: str, db: Session = Depends(get_db), current
     }
 
 
+@router.post("/generate-title")
+def generate_title(
+    data: models.TitleGenerateReq,
+    current_user: models.User = Depends(get_current_user),
+    x_hf_api_key: str | None = Header(None, alias="X-HF-Api-Key"),
+):
+    _ = current_user
+    load_dotenv(override=True)
+    env_key = os.getenv("hf_key_read")
+    api_key = (x_hf_api_key or "").strip() or (env_key or "").strip()
+
+    if not api_key:
+        fallback = data.prompt.strip()[:30]
+        if len(data.prompt.strip()) > 30:
+            fallback += "..."
+        return {"title": fallback}
+
+    try:
+        client = InferenceClient(token=api_key)
+        model_id = "Qwen/Qwen2.5-72B-Instruct"
+        
+        system_instruction = (
+            "You are a professional editor. "
+            "Generate a very short, creative, and catchy title (2 to 4 words) in the user's language "
+            "(either Vietnamese or English) based on their prompt. "
+            "Respond ONLY with the title. Do not include quotation marks, markdown, or extra explanations."
+        )
+        
+        messages = [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": f"Prompt: {data.prompt}"}
+        ]
+        
+        response = client.chat_completion(
+            model=model_id,
+            messages=messages,
+            max_tokens=30,
+            temperature=0.7
+        )
+        
+        title = ""
+        if response.choices:
+            title = response.choices[0].message.content or ""
+        
+        title = title.strip().replace('"', '').replace("'", "").strip()
+        if not title:
+            raise ValueError("Empty response from AI")
+            
+        return {"title": title}
+    except Exception as e:
+        print(f"[WARN] Failed to auto-generate title via AI: {e}")
+        fallback = data.prompt.strip()[:30]
+        if len(data.prompt.strip()) > 30:
+            fallback += "..."
+        return {"title": fallback}
+
+
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(project_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """

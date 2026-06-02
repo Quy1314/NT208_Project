@@ -21,6 +21,10 @@ type ProjectStageProps = {
   onDeleteSelectedProject: () => void;
   onStartCreating: () => void;
   isStreaming?: boolean;
+  draftTitle?: string;
+  onSetDraftTitle?: (v: string) => void;
+  onAutoGenerateTitle?: () => void;
+  isGeneratingTitle?: boolean;
 };
 
 interface TypewriterTextProps {
@@ -161,6 +165,10 @@ export default function ProjectStage({
   onDeleteSelectedProject,
   onStartCreating,
   isStreaming = false,
+  draftTitle = "",
+  onSetDraftTitle,
+  onAutoGenerateTitle,
+  isGeneratingTitle = false,
 }: ProjectStageProps) {
   if (selectedProject) {
     return (
@@ -208,9 +216,47 @@ export default function ProjectStage({
 
   if (isCreating) {
     return (
-      <div className="max-w-3xl mx-auto pt-10 px-4 h-full flex flex-col justify-center">
+      <div className="max-w-3xl mx-auto pt-10 px-4 h-full flex flex-col justify-center animate-in fade-in duration-300">
         <h2 className={`text-3xl md:text-4xl font-extrabold mb-2 tracking-tight ${isDark ? "text-slate-100" : "text-slate-900"}`}>Tạo dự án mới</h2>
-        <p className={`${isDark ? "text-slate-400" : "text-slate-500"} font-medium mb-10`}>Hãy hướng dẫn AI tạo một câu chuyện sáng tạo bên dưới.</p>
+        <p className={`${isDark ? "text-slate-400" : "text-slate-500"} font-medium mb-8`}>Hãy hướng dẫn AI tạo một câu chuyện sáng tạo bên dưới.</p>
+        
+        <div className={`p-6 rounded-3xl border mb-10 transition-all shadow-md ${
+          isDark 
+            ? "bg-slate-900/40 backdrop-blur-xl border-white/10 text-white shadow-black/25" 
+            : "bg-slate-50 border-slate-200 shadow-slate-100/50"
+        }`}>
+          <label className={`block text-xs font-bold uppercase tracking-wider mb-2.5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+            Tiêu đề dự án
+          </label>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              placeholder="Nhập tiêu đề hoặc để AI tự đặt tên..."
+              value={draftTitle}
+              onChange={(e) => onSetDraftTitle?.(e.target.value)}
+              className={`flex-1 px-4 py-3 rounded-2xl border text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
+                isDark
+                  ? "bg-slate-950/60 border-white/10 text-white placeholder-slate-500 focus:border-cyan-500/40"
+                  : "bg-white border-slate-200 text-slate-800 placeholder-slate-400 focus:border-blue-300"
+              }`}
+            />
+            {onAutoGenerateTitle && (
+              <Button
+                type="button"
+                onClick={onAutoGenerateTitle}
+                disabled={isGeneratingTitle}
+                className={`text-xs font-bold px-5 py-3 rounded-2xl flex items-center gap-2 border transition-all cursor-pointer ${
+                  isDark
+                    ? "bg-slate-950/40 border-white/10 text-white hover:bg-slate-900/60 hover:text-cyan-300"
+                    : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-blue-600"
+                }`}
+              >
+                <Sparkles size={14} className={isGeneratingTitle ? "animate-spin text-cyan-400" : "text-cyan-400"} />
+                {isGeneratingTitle ? "Đang đặt..." : "Tự đặt tên"}
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     );
   }

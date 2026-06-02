@@ -7,7 +7,7 @@ import { API_BASE_URL } from "@/lib/api";
 import { downloadMarkdown, downloadPdf, downloadWord } from "@/lib/export_project";
 import { clearPersonalHfApiKey, getPersonalHfApiKey, setPersonalHfApiKey } from "@/lib/personal_hf";
 import { TranslationMode, translateProjectForExport } from "@/lib/translate_for_export";
-import { getTemplatePromptById } from "@/lib/landing_templates";
+import { getTemplateById } from "@/lib/landing_templates";
 import {
   toProjectContinueApiPayload,
   toProjectCreateApiPayload,
@@ -442,6 +442,7 @@ export default function DashboardPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isContinuing, setIsContinuing] = useState(false);
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   const [modelName, setModelName] = useState("Qwen/Qwen2.5-72B-Instruct");
   const isImageModel = isImageModelId(modelName);
   const isAudioModel = isAudioModelId(modelName);
@@ -654,12 +655,12 @@ export default function DashboardPage() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const templateId = urlParams.get("template");
-    const templatePrompt = getTemplatePromptById(templateId);
-    if (!templatePrompt) return;
+    const template = getTemplateById(templateId);
+    if (!template) return;
     setIsCreating(true);
     setSelectedProject(null);
-    setPrompt(templatePrompt);
-    setTitle((prev) => prev || "AI Template Draft");
+    setPrompt(template.promptText);
+    setTitle((prev) => prev || template.title);
   }, []);
 
   useEffect(() => {
@@ -768,7 +769,27 @@ export default function DashboardPage() {
         setSelectedProject(data);
         setIsCreating(false);
         setContinuePrompt("");
-        setVideoMessages([]);
+        if (data.content && data.content.trim()) {
+          try {
+            const parsed = JSON.parse(data.content);
+            if (Array.isArray(parsed)) {
+              setVideoMessages(parsed);
+            } else {
+              setVideoMessages([]);
+            }
+          } catch {
+            if (data.content.includes("http") || data.content.includes(".mp4")) {
+              setVideoMessages([
+                { id: "msg-1", role: "user", prompt: data.prompt },
+                { id: "msg-2", role: "assistant", videoUrl: data.content }
+              ]);
+            } else {
+              setVideoMessages([]);
+            }
+          }
+        } else {
+          setVideoMessages([]);
+        }
       } else if (res.status === 401) {
         handleLogout();
       }
@@ -887,6 +908,38 @@ export default function DashboardPage() {
       alert(`Xuất file thất bại: ${msg}`);
     } finally {
       setExportingFormat(null);
+    }
+  };
+
+  const handleAutoGenerateTitle = async () => {
+    const rawPrompt = prompt.trim();
+    if (!rawPrompt) {
+      alert("Vui lòng nhập Prompt trước để AI có dữ liệu đặt tên.");
+      return;
+    }
+    setIsGeneratingTitle(true);
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/projects/generate-title`, {
+        method: "POST",
+        headers: buildProjectRequestHeaders(token),
+        body: JSON.stringify({ prompt: rawPrompt, language }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) {
+          setTitle(data.title);
+        }
+      } else {
+        const fallback = rawPrompt.slice(0, 30) + (rawPrompt.length > 30 ? "..." : "");
+        setTitle(fallback);
+      }
+    } catch (e) {
+      console.error("Lỗi tự động đặt tên:", e);
+      const fallback = rawPrompt.slice(0, 30) + (rawPrompt.length > 30 ? "..." : "");
+      setTitle(fallback);
+    } finally {
+      setIsGeneratingTitle(false);
     }
   };
 
@@ -1290,6 +1343,11 @@ export default function DashboardPage() {
       );
       if (selectedProject) setContinuePrompt("");
       else setPrompt("");
+
+      if (data.project_id) {
+        await fetchProjects();
+        await handleSelectProject(data.project_id);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Lỗi kết nối.";
       setVideoMessages((prev) =>
@@ -1593,6 +1651,10 @@ export default function DashboardPage() {
                   setVideoMessages([]);
                 }}
                 isStreaming={isGenerating || isContinuing}
+                draftTitle={title}
+                onSetDraftTitle={setTitle}
+                onAutoGenerateTitle={handleAutoGenerateTitle}
+                isGeneratingTitle={isGeneratingTitle}
               />
             )}
             <div ref={bottomRef} data-testid="workspace-scroll-bottom" className="h-0 w-0" />

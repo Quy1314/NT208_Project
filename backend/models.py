@@ -167,6 +167,10 @@ class ProjectContinueReq(BaseModel):
     language: Literal["vietnamese", "english"] = "vietnamese"
     model_name: str | None = None
 
+class TitleGenerateReq(BaseModel):
+    prompt: str
+    language: Literal["vietnamese", "english"] = "vietnamese"
+
 class ProjectResponse(BaseModel):
     id: str
     title: str

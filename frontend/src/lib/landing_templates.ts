@@ -76,3 +76,8 @@ export function getTemplatePromptById(id: string | null): string | null {
   const matched = LANDING_TEMPLATES.find((item) => item.id === id);
   return matched?.promptText ?? null;
 }
+
+export function getTemplateById(id: string | null): LandingTemplate | null {
+  if (!id) return null;
+  return LANDING_TEMPLATES.find((item) => item.id === id) ?? null;
+}
