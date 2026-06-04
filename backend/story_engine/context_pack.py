@@ -80,6 +80,9 @@ def build_context_messages(
     top_k: int = 6,
     canon_context_pack: str | None = None,
     max_context_tokens: int | None = None,
+    min_words: int | None = None,
+    max_words: int | None = None,
+    rolling_summary: str | None = None,
 ) -> list[dict[str, str]]:
     """Xây dựng danh sách messages được tối ưu hóa ngữ cảnh (sliding window + RAG)."""
     import models
@@ -126,6 +129,13 @@ def build_context_messages(
         {"role": "system", "content": system_prompt}
     ]
 
+    # Thêm rolling summary nếu có
+    if rolling_summary and rolling_summary.strip():
+        messages.append({
+            "role": "system",
+            "content": f"Tóm tắt diễn biến cốt truyện các chương trước:\n{rolling_summary.strip()}"
+        })
+
     # Thêm canon context pack nếu có
     if canon_context_pack and canon_context_pack.strip():
         messages.append({
@@ -144,12 +154,31 @@ def build_context_messages(
 
     # Thêm latest user query
     language_label = "vietnamese" if language == "vietnamese" else "english"
+    length_constraint = ""
+    if min_words is not None and max_words is not None:
+        if language_label == "english":
+            length_constraint = (
+                f"Word count constraints:\n"
+                f"- Minimum: {min_words} words\n"
+                f"- Maximum: {max_words} words\n"
+                f"Ensure the generated chapter length is within this range.\n"
+            )
+        else:
+            length_constraint = (
+                f"Ràng buộc độ dài bắt buộc:\n"
+                f"- Số từ tối thiểu: {min_words} từ\n"
+                f"- Số từ tối đa: {max_words} từ\n"
+                f"Hãy viết chương truyện này có độ dài nằm trong khoảng từ {min_words} đến {max_words} từ.\n"
+            )
+
     if language_label == "english":
         user_content = (
             f"Write the next part of this story in {language_label}.\n"
             f"Title: {title}\n"
             f"Current instruction: {latest_user_message}\n"
         )
+        if length_constraint:
+            user_content += f"\n{length_constraint}"
     else:
         user_content = (
             f"Hãy viết tiếp nội dung truyện sáng tạo bằng {language_label}.\n"
@@ -160,6 +189,8 @@ def build_context_messages(
             "- Nếu có thuật ngữ riêng (Pokemon, Team Rocket, Gym), giữ nguyên tên riêng, còn lại viết tiếng Việt tự nhiên.\n"
             "- Không mâu thuẫn với các sự kiện đã có ở chương trước.\n"
         )
+        if length_constraint:
+            user_content += f"- {length_constraint.replace('Ràng buộc độ dài bắt buộc:', '').strip()}\n"
 
     messages.append({"role": "user", "content": user_content})
 

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, ForeignKey, TIMESTAMP, Boolean
+from sqlalchemy import Column, String, Text, ForeignKey, TIMESTAMP, Boolean, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -25,10 +25,14 @@ class Project(Base):
     title = Column(String(255), nullable=False)
     prompt = Column(Text, nullable=False)
     content = Column(Text, nullable=False, server_default="")
+    rolling_summary = Column(Text, nullable=True)
+    min_words = Column(Integer, nullable=True, default=1000, server_default="1000")
+    max_words = Column(Integer, nullable=True, default=2000, server_default="2000")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     context_entries = relationship("ProjectContextEntry", back_populates="project")
+
 
 
 class PasswordResetToken(Base):
@@ -161,11 +165,15 @@ class ProjectCreateReq(BaseModel):
     prompt: str
     language: Literal["vietnamese", "english"] = "vietnamese"
     model_name: str | None = None  # Hugging Face Inference model id (optional)
+    min_words: int | None = 1000
+    max_words: int | None = 2000
 
 class ProjectContinueReq(BaseModel):
     prompt: str
     language: Literal["vietnamese", "english"] = "vietnamese"
     model_name: str | None = None
+    min_words: int | None = 1000
+    max_words: int | None = 2000
 
 class TitleGenerateReq(BaseModel):
     prompt: str
@@ -176,9 +184,13 @@ class ProjectResponse(BaseModel):
     title: str
     prompt: str
     content: str
+    rolling_summary: str | None = None
+    min_words: int | None = 1000
+    max_words: int | None = 2000
     
     class Config:
         from_attributes = True
+
 
 
 class ExportTranslateReq(BaseModel):

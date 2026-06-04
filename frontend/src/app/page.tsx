@@ -187,6 +187,12 @@ type WorkspaceComposerDockProps = {
   handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   clearAttachedFile: () => void;
   toggleSpeechRecognition: () => void;
+  minWords: number;
+  setMinWords: (v: number) => void;
+  maxWords: number;
+  setMaxWords: (v: number) => void;
+  lengthOption: string;
+  setLengthOption: (v: string) => void;
 };
 
 function WorkspaceComposerDock({
@@ -219,6 +225,12 @@ function WorkspaceComposerDock({
   handleFileChange,
   clearAttachedFile,
   toggleSpeechRecognition,
+  minWords,
+  setMinWords,
+  maxWords,
+  setMaxWords,
+  lengthOption,
+  setLengthOption,
 }: WorkspaceComposerDockProps) {
   if (!isVisible) return null;
 
@@ -335,20 +347,116 @@ function WorkspaceComposerDock({
               ))}
             </select>
             {!isVideo && !isImageModel && !isAudioModel && (
-              <select
-                value={creativity}
-                onChange={(e) => setCreativity(e.target.value)}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-lg border focus:outline-none ${
-                  isDark
-                    ? "bg-slate-950/40 border-white/10 text-white"
-                    : "bg-slate-50 border-slate-200 text-slate-700"
-                }`}
-              >
-                <option className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Focused</option>
-                <option className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Balanced</option>
-                <option className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Creative</option>
-              </select>
+              <>
+                <select
+                  value={creativity}
+                  onChange={(e) => setCreativity(e.target.value)}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg border focus:outline-none ${
+                    isDark
+                      ? "bg-slate-950/40 border-white/10 text-white"
+                      : "bg-slate-50 border-slate-200 text-slate-700"
+                  }`}
+                >
+                  <option className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Focused</option>
+                  <option className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Balanced</option>
+                  <option className={isDark ? "bg-slate-900 text-slate-100" : "bg-white text-slate-700"}>Creative</option>
+                </select>
+
+                <div className="flex items-center gap-2">
+                  {lengthOption !== "custom" ? (
+                    <div className={`flex items-center gap-2 border rounded-lg px-3 py-1 ${
+                      isDark ? "bg-slate-950/40 border-white/10 text-white" : "bg-slate-50 border-slate-200 text-slate-700"
+                    }`}>
+                      <span className="text-[11px] font-medium text-slate-400">Độ dài:</span>
+                      <input
+                        type="range"
+                        min="1000"
+                        max="3000"
+                        step="1000"
+                        value={lengthOption}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setLengthOption(val);
+                          if (val === "1000") {
+                            setMinWords(800);
+                            setMaxWords(1200);
+                          } else if (val === "2000") {
+                            setMinWords(1800);
+                            setMaxWords(2200);
+                          } else if (val === "3000") {
+                            setMinWords(2800);
+                            setMaxWords(3200);
+                          }
+                        }}
+                        className="w-20 h-1 bg-slate-300 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500 transition-all focus:outline-none"
+                        title="Trượt để chọn độ dài: 1000, 2000, hoặc 3000 từ"
+                      />
+                      <span className="text-[11px] font-bold text-indigo-500 dark:text-indigo-400 whitespace-nowrap min-w-[50px] text-center">
+                        ~{lengthOption} từ
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLengthOption("custom");
+                        }}
+                        className={`text-[11px] font-semibold transition-colors cursor-pointer border-l pl-2 ${
+                          isDark ? "text-indigo-400 hover:text-indigo-300 border-white/10" : "text-indigo-600 hover:text-indigo-500 border-slate-200"
+                        }`}
+                        title="Tự tùy chỉnh số từ tối thiểu và tối đa"
+                      >
+                        Tự chỉnh
+                      </button>
+                    </div>
+                  ) : (
+                    <div className={`flex items-center gap-1.5 border rounded-lg px-2.5 py-1 ${
+                      isDark ? "bg-slate-950/40 border-white/10 text-white" : "bg-slate-50 border-slate-200 text-slate-700"
+                    }`}>
+                      <input
+                        type="number"
+                        value={minWords}
+                        onChange={(e) => setMinWords(Math.max(1, parseInt(e.target.value) || 0))}
+                        placeholder="Min"
+                        title="Số từ tối thiểu"
+                        className={`w-14 text-center text-xs font-semibold px-1 py-0.5 rounded border focus:outline-none ${
+                          isDark
+                            ? "bg-slate-900 border-white/10 text-white focus:border-indigo-500"
+                            : "bg-white border-slate-200 text-slate-700 focus:border-indigo-500"
+                        }`}
+                      />
+                      <span className="text-[10px] text-slate-400">đến</span>
+                      <input
+                        type="number"
+                        value={maxWords}
+                        onChange={(e) => setMaxWords(Math.max(1, parseInt(e.target.value) || 0))}
+                        placeholder="Max"
+                        title="Số từ tối đa"
+                        className={`w-14 text-center text-xs font-semibold px-1 py-0.5 rounded border focus:outline-none ${
+                          isDark
+                            ? "bg-slate-900 border-white/10 text-white focus:border-indigo-500"
+                            : "bg-white border-slate-200 text-slate-700 focus:border-indigo-500"
+                        }`}
+                      />
+                      <span className="text-[11px] text-slate-400">từ</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLengthOption("1000");
+                          setMinWords(800);
+                          setMaxWords(1200);
+                        }}
+                        className={`text-[11px] font-semibold transition-colors cursor-pointer border-l pl-2 ml-1 ${
+                          isDark ? "text-indigo-400 hover:text-indigo-300 border-white/10" : "text-indigo-600 hover:text-indigo-500 border-slate-200"
+                        }`}
+                        title="Quay lại dùng thanh trượt mẫu"
+                      >
+                        Thanh trượt
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
+
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value as "vietnamese" | "english")}
@@ -425,6 +533,18 @@ function WorkspaceComposerDock({
   );
 }
 
+interface CanonCharacter {
+  id: string;
+  slug: string;
+  display_name: string;
+}
+
+interface CanonLocation {
+  slug: string;
+  display_name: string;
+  env_style_tags?: string[];
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -456,6 +576,21 @@ export default function DashboardPage() {
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [isCreatingTeam, setIsCreatingTeam] = useState(false);
   const [isProjectSettingsOpen, setIsProjectSettingsOpen] = useState(false);
+  const [isCanonModalOpen, setIsCanonModalOpen] = useState(false);
+  const [canonCharacters, setCanonCharacters] = useState<CanonCharacter[]>([]);
+  const [canonLocations, setCanonLocations] = useState<CanonLocation[]>([]);
+  const [isLoadingCanon, setIsLoadingCanon] = useState(false);
+  const [activeCanonTab, setActiveCanonTab] = useState<"characters" | "locations">("characters");
+
+  // Character Form States
+  const [newCharDisplayName, setNewCharDisplayName] = useState("");
+  const [selectedCharForVariant, setSelectedCharForVariant] = useState<CanonCharacter | null>(null);
+  const [outfitSummary, setOutfitSummary] = useState("");
+  const [faceMarksInput, setFaceMarksInput] = useState("");
+
+  // Location Form States
+  const [newLocDisplayName, setNewLocDisplayName] = useState("");
+  const [newLocEnvTags, setNewLocEnvTags] = useState("");
   const [teamToken, setTeamToken] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -474,6 +609,9 @@ export default function DashboardPage() {
 
   const [videoMessages, setVideoMessages] = useState<VideoChatMessage[]>([]);
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  const [minWords, setMinWords] = useState<number>(1000);
+  const [maxWords, setMaxWords] = useState<number>(2000);
+  const [lengthOption, setLengthOption] = useState<string>("1000");
 
   // File attachments and voice recording states
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -661,6 +799,9 @@ export default function DashboardPage() {
     setSelectedProject(null);
     setPrompt(template.promptText);
     setTitle((prev) => prev || template.title);
+    setMinWords(1000);
+    setMaxWords(2000);
+    setLengthOption("1000");
   }, []);
 
   useEffect(() => {
@@ -769,6 +910,25 @@ export default function DashboardPage() {
         setSelectedProject(data);
         setIsCreating(false);
         setContinuePrompt("");
+        
+        // Sync project word limits
+        if (data.min_words && data.max_words) {
+          setMinWords(data.min_words);
+          setMaxWords(data.max_words);
+          if (data.min_words === 800 && data.max_words === 1200) {
+            setLengthOption("1000");
+          } else if (data.min_words === 1800 && data.max_words === 2200) {
+            setLengthOption("2000");
+          } else if (data.min_words === 2800 && data.max_words === 3200) {
+            setLengthOption("3000");
+          } else {
+            setLengthOption("custom");
+          }
+        } else {
+          setMinWords(1000);
+          setMaxWords(2000);
+          setLengthOption("1000");
+        }
         if (data.content && data.content.trim()) {
           try {
             const parsed = JSON.parse(data.content);
@@ -797,6 +957,127 @@ export default function DashboardPage() {
       console.error(e);
     }
   };
+
+  const fetchCanonOverview = useCallback(async () => {
+    if (!selectedProject?.id) return;
+    setIsLoadingCanon(true);
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/canon/overview`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCanonCharacters(data.characters || []);
+        setCanonLocations(data.locations || []);
+      }
+    } catch (e) {
+      console.error("Lỗi khi tải thông tin canon:", e);
+    } finally {
+      setIsLoadingCanon(false);
+    }
+  }, [selectedProject?.id]);
+
+  const handleAddCharacter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCharDisplayName.trim() || !selectedProject?.id) return;
+
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    const slug = newCharDisplayName.trim().toLowerCase().replace(/\s+/g, "_");
+    
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/canon/characters`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ slug, display_name: newCharDisplayName.trim() }),
+      });
+      if (res.ok) {
+        setNewCharDisplayName("");
+        fetchCanonOverview();
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Không thể thêm nhân vật.");
+      }
+    } catch (e) {
+      console.error("Lỗi thêm nhân vật:", e);
+      alert("Đã xảy ra lỗi.");
+    }
+  };
+
+  const handleSaveVisualVariant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCharForVariant || !selectedProject?.id) return;
+
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/canon/visual-variant`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          character_slug: selectedCharForVariant.slug,
+          label: "default",
+          outfit_summary: outfitSummary.trim(),
+          face_marks_json: faceMarksInput.trim() ? [{ type: "description", value: faceMarksInput.trim() }] : [],
+        }),
+      });
+      if (res.ok) {
+        alert("Đã lưu cấu hình ngoại hình nhân vật!");
+        setSelectedCharForVariant(null);
+        setOutfitSummary("");
+        setFaceMarksInput("");
+        fetchCanonOverview();
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Không thể lưu ngoại hình.");
+      }
+    } catch (e) {
+      console.error("Lỗi lưu ngoại hình nhân vật:", e);
+      alert("Đã xảy ra lỗi.");
+    }
+  };
+
+  const handleAddLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLocDisplayName.trim() || !selectedProject?.id) return;
+
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    const slug = newLocDisplayName.trim().toLowerCase().replace(/\s+/g, "_");
+    const env_style_tags = newLocEnvTags.trim() ? newLocEnvTags.split(",").map(t => t.trim()) : [];
+    
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/canon/locations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ slug, display_name: newLocDisplayName.trim(), env_style_tags }),
+      });
+      if (res.ok) {
+        setNewLocDisplayName("");
+        setNewLocEnvTags("");
+        fetchCanonOverview();
+      } else {
+        const err = await res.json();
+        alert(err.detail || "Không thể thêm địa điểm.");
+      }
+    } catch (e) {
+      console.error("Lỗi thêm địa điểm:", e);
+      alert("Đã xảy ra lỗi.");
+    }
+  };
+
+  useEffect(() => {
+    if (isCanonModalOpen && selectedProject?.id) {
+      fetchCanonOverview();
+    }
+  }, [isCanonModalOpen, selectedProject?.id, fetchCanonOverview]);
 
   const handleDeleteProject = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -967,7 +1248,7 @@ export default function DashboardPage() {
       const res = await fetch(`${API_BASE_URL}/api/projects/${streamParam}`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify(toProjectCreateApiPayload({ title: finalTitle, prompt: finalPromptText, language, modelName: modelName.trim() })),
+        body: JSON.stringify(toProjectCreateApiPayload({ title: finalTitle, prompt: finalPromptText, language, modelName: modelName.trim(), minWords, maxWords })),
       });
       if (res.ok) {
         if (isTextModel) {
@@ -1103,7 +1384,7 @@ export default function DashboardPage() {
       const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/continue${streamParam}`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify(toProjectContinueApiPayload({ prompt: finalPromptText, language, modelName: modelName.trim() })),
+        body: JSON.stringify(toProjectContinueApiPayload({ prompt: finalPromptText, language, modelName: modelName.trim(), minWords, maxWords })),
       });
       if (res.ok) {
         if (isTextModel) {
@@ -1456,6 +1737,9 @@ export default function DashboardPage() {
             setPrompt("");
             setContinuePrompt("");
             setVideoMessages([]);
+            setMinWords(1000);
+            setMaxWords(2000);
+            setLengthOption("1000");
           }}
           onOpenSettings={() => {
             if (!selectedProject) {
@@ -1464,6 +1748,7 @@ export default function DashboardPage() {
             }
             setIsProjectSettingsOpen(true);
           }}
+          onOpenCanon={() => setIsCanonModalOpen(true)}
         />
 
         <div className={`flex-1 flex flex-col relative transition-all duration-300 ${isDark ? "bg-transparent" : "bg-white"}`}>
@@ -1649,6 +1934,9 @@ export default function DashboardPage() {
                 onStartCreating={() => {
                   setIsCreating(true);
                   setVideoMessages([]);
+                  setMinWords(1000);
+                  setMaxWords(2000);
+                  setLengthOption("1000");
                 }}
                 isStreaming={isGenerating || isContinuing}
                 draftTitle={title}
@@ -1690,6 +1978,12 @@ export default function DashboardPage() {
             handleFileChange={handleFileChange}
             clearAttachedFile={clearAttachedFile}
             toggleSpeechRecognition={toggleSpeechRecognition}
+            minWords={minWords}
+            setMinWords={setMinWords}
+            maxWords={maxWords}
+            setMaxWords={setMaxWords}
+            lengthOption={lengthOption}
+            setLengthOption={setLengthOption}
           />
 
           {isProfileOpen && (
@@ -1923,6 +2217,268 @@ export default function DashboardPage() {
                       )}
                     </div>
                   </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {isCanonModalOpen && selectedProject && (
+            <>
+              <div
+                className="absolute inset-0 bg-slate-900/20 backdrop-blur-[2px] z-40 animate-in fade-in"
+                onClick={() => setIsCanonModalOpen(false)}
+              />
+              <div className={`absolute top-0 right-0 w-full sm:w-[480px] h-full shadow-[0_0_40px_rgba(0,0,0,0.4)] z-50 flex flex-col animate-in slide-in-from-right duration-300 border-l ${
+                isDark ? "bg-slate-900/90 backdrop-blur-xl border-white/10 text-white shadow-black/60" : "bg-white border-slate-200 text-slate-900"
+              }`}>
+                <div className="flex items-center justify-between p-6 border-b border-white/5">
+                  <div>
+                    <h3 className="font-semibold text-lg text-white">Cấu hình Vũ trụ & Nhân vật</h3>
+                    <p className="text-xs text-slate-400">Thiết lập thế giới lore và ngoại hình nhân vật nhất quán</p>
+                  </div>
+                  <button onClick={() => setIsCanonModalOpen(false)} className="text-[#8c8f99] hover:text-white transition-colors">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="flex border-b border-white/5 px-6">
+                  <button
+                    onClick={() => {
+                      setActiveCanonTab("characters");
+                      setSelectedCharForVariant(null);
+                    }}
+                    className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
+                      activeCanonTab === "characters" 
+                        ? "border-blue-500 text-blue-400" 
+                        : "border-transparent text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Nhân vật
+                  </button>
+                  <button
+                    onClick={() => setActiveCanonTab("locations")}
+                    className={`flex-1 py-3 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
+                      activeCanonTab === "locations" 
+                        ? "border-blue-500 text-blue-400" 
+                        : "border-transparent text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Địa điểm / Bối cảnh
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {isLoadingCanon ? (
+                    <div className="flex flex-col items-center justify-center py-20 gap-3">
+                      <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+                      <p className="text-sm text-slate-400">Đang tải vũ trụ canon...</p>
+                    </div>
+                  ) : activeCanonTab === "characters" ? (
+                    selectedCharForVariant ? (
+                      <form onSubmit={handleSaveVisualVariant} className="space-y-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCharForVariant(null)}
+                            className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold"
+                          >
+                            ← Quay lại
+                          </button>
+                        </div>
+                        <h4 className="font-semibold text-white">Ngoại hình: {selectedCharForVariant.display_name}</h4>
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-[13px] font-medium text-[#cdd0d5] mb-1.5">
+                              Trang phục / Outfit (outfit_summary)
+                            </label>
+                            <textarea
+                              rows={4}
+                              value={outfitSummary}
+                              onChange={(e) => setOutfitSummary(e.target.value)}
+                              placeholder="Ví dụ: Áo khoác da đen bụi bặm, áo thun trắng bó, quần jeans sẫm màu và bốt cao cổ..."
+                              className={`w-full rounded-xl px-4 py-3 text-sm outline-none border resize-none ${
+                                isDark 
+                                  ? "bg-slate-950/40 border-white/10 text-white placeholder-slate-600 focus:border-blue-500/50" 
+                                  : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400"
+                              }`}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[13px] font-medium text-[#cdd0d5] mb-1.5">
+                              Đặc điểm khuôn mặt / Nhận dạng (face_marks)
+                            </label>
+                            <input
+                              type="text"
+                              value={faceMarksInput}
+                              onChange={(e) => setFaceMarksInput(e.target.value)}
+                              placeholder="Ví dụ: Tóc ngắn undercut màu xám bạc, vết sẹo dọc mắt trái..."
+                              className={`w-full rounded-xl px-4 py-3 text-sm outline-none border ${
+                                isDark 
+                                  ? "bg-slate-950/40 border-white/10 text-white placeholder-slate-600 focus:border-blue-500/50" 
+                                  : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400"
+                              }`}
+                            />
+                            <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                              Đặc điểm ngoại hình này được chèn vào prompt tạo ảnh để giữ nhân vật vẽ ra được nhất quán.
+                            </p>
+                          </div>
+                          <div className="flex gap-2 pt-2">
+                            <button
+                              type="submit"
+                              className="flex-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-2.5 transition-all shadow-md cursor-pointer"
+                            >
+                              Lưu ngoại hình
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCharForVariant(null)}
+                              className={`px-4 rounded-xl border font-semibold py-2.5 transition-colors cursor-pointer ${
+                                isDark ? "border-white/10 text-[#e5e7eb] hover:bg-white/5" : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              Hủy
+                            </button>
+                          </div>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="space-y-6">
+                        <div className="space-y-3">
+                          <h4 className="font-semibold text-white text-sm">Danh sách nhân vật</h4>
+                          {canonCharacters.length === 0 ? (
+                            <p className="text-xs text-slate-500 italic">Chưa có nhân vật nào trong canon.</p>
+                          ) : (
+                            <div className="grid gap-2">
+                              {canonCharacters.map((c) => (
+                                <div
+                                  key={c.id || c.slug}
+                                  className={`flex items-center justify-between p-3 rounded-xl border ${
+                                    isDark ? "bg-slate-950/40 border-white/10" : "bg-slate-50 border-slate-200"
+                                  }`}
+                                >
+                                  <div>
+                                    <p className="text-sm font-semibold text-white">{c.display_name}</p>
+                                    <p className="text-[11px] text-slate-500 font-mono">slug: {c.slug}</p>
+                                  </div>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedCharForVariant(c);
+                                      setOutfitSummary("");
+                                      setFaceMarksInput("");
+                                    }}
+                                    className="text-xs text-indigo-400 hover:text-indigo-300 font-semibold"
+                                  >
+                                    Ngoại hình
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <form onSubmit={handleAddCharacter} className="space-y-3 border-t border-white/5 pt-5">
+                          <h4 className="font-semibold text-white text-sm">Thêm nhân vật mới</h4>
+                          <div>
+                            <label className="block text-[13px] font-medium text-[#cdd0d5] mb-1.5">Tên hiển thị</label>
+                            <input
+                              type="text"
+                              value={newCharDisplayName}
+                              onChange={(e) => setNewCharDisplayName(e.target.value)}
+                              placeholder="Ví dụ: Alex Mercer, Elara Vance..."
+                              required
+                              className={`w-full rounded-xl px-4 py-3 text-sm outline-none border ${
+                                isDark 
+                                  ? "bg-slate-950/40 border-white/10 text-white placeholder-slate-600 focus:border-blue-500/50" 
+                                  : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400"
+                              }`}
+                            />
+                            <p className="text-[10px] text-slate-500 mt-1">
+                              Slug hệ thống sẽ tự động được sinh từ tên hiển thị (viết thường, không dấu, nối bằng gạch dưới).
+                            </p>
+                          </div>
+                          <button
+                            type="submit"
+                            className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-2.5 transition-all shadow-md cursor-pointer"
+                          >
+                            Tạo nhân vật
+                          </button>
+                        </form>
+                      </div>
+                    )
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="space-y-3">
+                        <h4 className="font-semibold text-white text-sm">Danh sách địa điểm</h4>
+                        {canonLocations.length === 0 ? (
+                          <p className="text-xs text-slate-500 italic">Chưa có địa điểm nào trong canon.</p>
+                        ) : (
+                          <div className="grid gap-2">
+                            {canonLocations.map((L) => (
+                              <div
+                                key={L.slug}
+                                className={`p-3 rounded-xl border ${
+                                  isDark ? "bg-slate-950/40 border-white/10" : "bg-slate-50 border-slate-200"
+                                }`}
+                              >
+                                <p className="text-sm font-semibold text-white">{L.display_name}</p>
+                                <p className="text-[11px] text-slate-500 font-mono">slug: {L.slug}</p>
+                                {L.env_style_tags && L.env_style_tags.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {L.env_style_tags.map((t: string) => (
+                                      <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/10">
+                                        {t}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <form onSubmit={handleAddLocation} className="space-y-3 border-t border-white/5 pt-5">
+                        <h4 className="font-semibold text-white text-sm">Thêm địa điểm mới</h4>
+                        <div>
+                          <label className="block text-[13px] font-medium text-[#cdd0d5] mb-1.5">Tên địa điểm</label>
+                          <input
+                            type="text"
+                            value={newLocDisplayName}
+                            onChange={(e) => setNewLocDisplayName(e.target.value)}
+                            placeholder="Ví dụ: Rừng Chạng Vạng, Thành phố Neo-Seoul..."
+                            required
+                            className={`w-full rounded-xl px-4 py-3 text-sm outline-none border ${
+                              isDark 
+                                ? "bg-slate-950/40 border-white/10 text-white placeholder-slate-600 focus:border-blue-500/50" 
+                                : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400"
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[13px] font-medium text-[#cdd0d5] mb-1.5">
+                            Tags phong cách bối cảnh (cách nhau bởi dấu phẩy)
+                          </label>
+                          <input
+                            type="text"
+                            value={newLocEnvTags}
+                            onChange={(e) => setNewLocEnvTags(e.target.value)}
+                            placeholder="Ví dụ: u ám, sương mù, cổ kính..."
+                            className={`w-full rounded-xl px-4 py-3 text-sm outline-none border ${
+                              isDark 
+                                ? "bg-slate-950/40 border-white/10 text-white placeholder-slate-600 focus:border-blue-500/50" 
+                                : "bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400"
+                            }`}
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-2.5 transition-all shadow-md cursor-pointer"
+                        >
+                          Tạo địa điểm
+                        </button>
+                      </form>
+                    </div>
+                  )}
                 </div>
               </div>
             </>

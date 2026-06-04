@@ -29,3 +29,10 @@ frontend/node_modules_test/
 backend/uploads/
 generated_test_image.png
 openspec_report.html
+
+# Ignore openspec, report and all dotfiles
+*openspec*
+*report*
+.*
+!.gitignore
+

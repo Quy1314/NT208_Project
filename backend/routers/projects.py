@@ -226,6 +226,76 @@ def generate_image_content(
 
 
 
+def generate_rolling_summary(
+    db: Session,
+    project_id: UUID,
+    content: str,
+    language: str,
+    api_key: str,
+) -> str | None:
+    """Gọi LLM sinh tóm tắt diễn biến cốt truyện hiện tại và lưu vào DB."""
+    if not content or not content.strip() or content == "Waiting for LLM generation...":
+        return None
+
+    words = content.split()
+    if len(words) < 200:
+        return None
+
+    try:
+        client = InferenceClient(token=api_key)
+        model_id = "Qwen/Qwen2.5-72B-Instruct"
+
+        # Lọc sạch nội dung truyện (bỏ qua các thẻ tag [[USER_PROMPT]] nếu có)
+        clean_content = re.sub(r"\[\[USER_PROMPT\]\].*?---", "", content, flags=re.DOTALL).strip()
+        clean_content = re.sub(r"---", "", clean_content).strip()
+
+        # Chỉ lấy phần cuối để tránh tràn ngữ cảnh
+        if len(clean_content) > 8000:
+            clean_content = "[...] " + clean_content[-8000:]
+
+        if language == "vietnamese":
+            system_instruction = (
+                "Bạn là một biên tập viên chuyên nghiệp. Hãy tóm tắt ngắn gọn diễn biến cốt truyện chính và sự phát triển của các nhân vật từ đầu đến giờ. "
+                "Bản tóm tắt cần ngắn gọn, súc tích (dưới 200 từ) để làm ngữ cảnh nền cho chương tiếp theo. "
+                "Chỉ trả về bản tóm tắt bằng tiếng Việt, không thêm lời chào hay giải thích nào khác."
+            )
+            user_message = f"Nội dung truyện cần tóm tắt:\n{clean_content}\n\nTóm tắt:"
+        else:
+            system_instruction = (
+                "You are a professional editor. Summarize the main plot and character developments of this story so far. "
+                "Keep the summary brief and concise (under 200 words) so it can serve as a background context. "
+                "Respond in the language of the story (english). "
+                "Output only the summary without any greeting or extra text."
+            )
+            user_message = f"Story content to summarize:\n{clean_content}\n\nSummary:"
+
+        messages = [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": user_message}
+        ]
+
+        response = client.chat_completion(
+            model=model_id,
+            messages=messages,
+            max_tokens=400,
+            temperature=0.3
+        )
+
+        if response and response.choices:
+            summary = str(response.choices[0].message.content).strip()
+            if summary:
+                # Lưu vào database
+                project = db.query(models.Project).filter(models.Project.id == project_id).first()
+                if project:
+                    project.rolling_summary = summary
+                    db.commit()
+                return summary
+    except Exception as e:
+        print(f"[WARN] Failed to generate rolling summary: {e}")
+    return None
+
+
+
 def generate_story_content(
     db: Session,
     project_id: UUID,
@@ -235,6 +305,9 @@ def generate_story_content(
     model_name: str | None = None,
     hf_api_key: str | None = None,
     canon_context_pack: str | None = None,
+    min_words: int | None = None,
+    max_words: int | None = None,
+    rolling_summary: str | None = None,
 ) -> str:
     generated_content = ""
     try:
@@ -271,12 +344,15 @@ def generate_story_content(
             latest_user_message=instruction,
             language=language,
             hf_api_key=api_key,
-            canon_context_pack=canon_context_pack
+            canon_context_pack=canon_context_pack,
+            min_words=min_words,
+            max_words=max_words,
+            rolling_summary=rolling_summary,
         )
 
         max_retries = 15
         max_tokens_per_call = 4096
-        max_continuations = 2  # Tối đa 2 lần nối tiếp nếu bị cắt
+        max_continuations = 3  # Tăng lên tối đa 3 lần nối tiếp để đạt số lượng từ mong muốn
 
         for attempt in range(max_retries):
             try:
@@ -291,14 +367,51 @@ def generate_story_content(
                     choice = response.choices[0]
                     generated_content = str(choice.message.content).strip()
 
-                    # Auto-continue khi model bị cắt giữa chừng (finish_reason=="length")
+                    # Logic tiếp nối tự động dựa trên độ dài (min_words/max_words) hoặc finish_reason
+                    current_words = len(generated_content.split())
                     finish_reason = getattr(choice, "finish_reason", None)
-                    if finish_reason == "length" and generated_content:
+                    
+                    should_continue = (finish_reason == "length" or (min_words and current_words < min_words))
+
+                    if should_continue and generated_content:
                         cont_messages = list(messages) + [
-                            {"role": "assistant", "content": generated_content},
-                            {"role": "user", "content": "Hãy viết tiếp phần còn lại, bắt đầu ngay từ chỗ bạn dừng. Không lặp lại nội dung đã viết."}
+                            {"role": "assistant", "content": generated_content}
                         ]
                         for _cont in range(max_continuations):
+                            current_words = len(generated_content.split())
+                            if max_words and current_words >= max_words:
+                                break
+
+                            # Xây dựng prompt nhắc nhở độ dài phù hợp
+                            if min_words and current_words < min_words:
+                                user_prompt = (
+                                    f"Nội dung hiện tại mới chỉ có {current_words} từ. "
+                                    f"Hãy tiếp tục câu chuyện để đạt độ dài tối thiểu {min_words} từ. "
+                                    f"Bắt đầu viết tiếp ngay từ chỗ bạn vừa dừng, tuyệt đối không lặp lại nội dung đã viết."
+                                    if language == "vietnamese" else
+                                    f"The current content has only {current_words} words. "
+                                    f"Please continue the story to reach at least {min_words} words. "
+                                    f"Start writing immediately from where you left off, without repeating any content."
+                                )
+                            else:
+                                user_prompt = (
+                                    "Hãy viết tiếp phần còn lại, bắt đầu ngay từ chỗ bạn dừng. Không lặp lại nội dung đã viết."
+                                    if language == "vietnamese" else
+                                    "Please continue writing the rest, starting immediately from where you stopped. Do not repeat written content."
+                                )
+
+                            # Nếu gần đạt giới hạn tối đa, nhắc nhở kết thúc
+                            if max_words and current_words >= max_words - 250:
+                                user_prompt = (
+                                    f"Nội dung đã đạt {current_words} từ, gần giới hạn tối đa {max_words} từ. "
+                                    f"Hãy nhanh chóng viết phần kết cho chương truyện này một cách súc tích và kết thúc chương ngay lập tức."
+                                    if language == "vietnamese" else
+                                    f"The content has reached {current_words} words, near the limit of {max_words}. "
+                                    f"Please quickly write a conclusion for this chapter in a concise manner and stop generating immediately."
+                                )
+
+                            cont_messages.append({"role": "user", "content": user_prompt})
+
                             try:
                                 cont_resp = client.chat_completion(
                                     model=model_id,
@@ -312,13 +425,14 @@ def generate_story_content(
                                     if cont_text:
                                         generated_content += "\n\n" + cont_text
                                     cont_finish = getattr(cont_choice, "finish_reason", None)
-                                    if cont_finish != "length":
-                                        break
-                                    # Cập nhật messages cho lần continue tiếp
+                                    cont_words = len(generated_content.split())
+                                    
                                     cont_messages = list(messages) + [
-                                        {"role": "assistant", "content": generated_content},
-                                        {"role": "user", "content": "Hãy viết tiếp phần còn lại, bắt đầu ngay từ chỗ bạn dừng. Không lặp lại nội dung đã viết."}
+                                        {"role": "assistant", "content": generated_content}
                                     ]
+                                    
+                                    if cont_finish != "length" and (not min_words or cont_words >= min_words):
+                                        break
                                 else:
                                     break
                             except Exception as cont_err:
@@ -353,6 +467,9 @@ def generate_story_content_stream(
     model_name: str | None = None,
     hf_api_key: str | None = None,
     canon_context_pack: str | None = None,
+    min_words: int | None = None,
+    max_words: int | None = None,
+    rolling_summary: str | None = None,
 ):
     try:
         from dotenv import find_dotenv
@@ -389,7 +506,10 @@ def generate_story_content_stream(
             latest_user_message=instruction,
             language=language,
             hf_api_key=api_key,
-            canon_context_pack=canon_context_pack
+            canon_context_pack=canon_context_pack,
+            min_words=min_words,
+            max_words=max_words,
+            rolling_summary=rolling_summary,
         )
 
         response = client.chat_completion(
@@ -409,6 +529,7 @@ def generate_story_content_stream(
     except Exception as e:
         print(f"Lỗi khi gọi Hugging Face Streaming API: {e}")
         yield f"Xin lỗi, quá trình sinh nội dung bằng Hugging Face bị gián đoạn: {str(e)}"
+
 
 
 def _sleep_seconds(value: float) -> None:
@@ -725,6 +846,8 @@ def create_project(
         title=data.title,
         prompt=data.prompt,
         content="",
+        min_words=data.min_words,
+        max_words=data.max_words,
     )
     db.add(new_project)
     db.commit()
@@ -768,6 +891,9 @@ def create_project(
                         model_name=data.model_name,
                         hf_api_key=x_hf_api_key,
                         canon_context_pack=pack,
+                        min_words=data.min_words,
+                        max_words=data.max_words,
+                        rolling_summary=None,
                     ):
                         generated_content += chunk
                         yield f"event: chunk\ndata: {json.dumps({'text': chunk})}\n\n"
@@ -777,6 +903,13 @@ def create_project(
                         cast(Any, proj).content = generated_content
                         db.commit()
                         db.refresh(proj)
+                        
+                        # Generate rolling summary
+                        load_dotenv(override=True)
+                        env_key = os.getenv("hf_key_read")
+                        api_key = (x_hf_api_key or "").strip() or (env_key or "").strip()
+                        if api_key:
+                            generate_rolling_summary(db, pid, generated_content, data.language, api_key)
 
                     db.add(
                         models.ProjectContextEntry(
@@ -814,6 +947,9 @@ def create_project(
                 model_name=data.model_name,
                 hf_api_key=x_hf_api_key,
                 canon_context_pack=pack,
+                min_words=data.min_words,
+                max_words=data.max_words,
+                rolling_summary=None,
             )
             if scope:
                 try:
@@ -825,6 +961,13 @@ def create_project(
         cast(Any, new_project).content = generated_content
         db.commit()
         db.refresh(new_project)
+
+        # Generate rolling summary
+        load_dotenv(override=True)
+        env_key = os.getenv("hf_key_read")
+        api_key = (x_hf_api_key or "").strip() or (env_key or "").strip()
+        if api_key:
+            generate_rolling_summary(db, pid, generated_content, data.language, api_key)
 
         db.add(
             models.ProjectContextEntry(
@@ -875,7 +1018,10 @@ def create_project(
         id=str(new_project_obj.id),
         title=str(new_project_obj.title),
         prompt=str(new_project_obj.prompt),
-        content=str(new_project_obj.content)
+        content=str(new_project_obj.content),
+        rolling_summary=getattr(new_project_obj, "rolling_summary", None),
+        min_words=getattr(new_project_obj, "min_words", 1000),
+        max_words=getattr(new_project_obj, "max_words", 2000),
     )
 
 
@@ -922,6 +1068,14 @@ def continue_project(
     audio_models = [FPT_TTS_MODEL]
     is_audio_model = data.model_name and data.model_name in audio_models
     is_image_model = bool(data.model_name and data.model_name in HF_IMAGE_MODELS)
+
+    # Cấu hình min/max words
+    min_w = data.min_words or project.min_words or 1000
+    max_w = data.max_words or project.max_words or 2000
+    project.min_words = min_w
+    project.max_words = max_w
+    db.commit()
+    r_summary = project.rolling_summary
 
     project_obj = cast(Any, project)
     project_content = str(project_obj.content or "")
@@ -990,6 +1144,9 @@ def continue_project(
                         model_name=data.model_name,
                         hf_api_key=x_hf_api_key,
                         canon_context_pack=pack if canon_engine_enabled() else None,
+                        min_words=min_w,
+                        max_words=max_w,
+                        rolling_summary=r_summary,
                     ):
                         new_chunk += chunk
                         yield f"event: chunk\ndata: {json.dumps({'text': chunk})}\n\n"
@@ -1007,6 +1164,13 @@ def continue_project(
                             proj_obj.content = continuation_chunk
                         db.commit()
                         db.refresh(proj)
+                        
+                        # Generate rolling summary
+                        load_dotenv(override=True)
+                        env_key = os.getenv("hf_key_read")
+                        api_key = (x_hf_api_key or "").strip() or (env_key or "").strip()
+                        if api_key:
+                            generate_rolling_summary(db, pid, proj_obj.content, data.language, api_key)
 
                     db.add(
                         models.ProjectContextEntry(
@@ -1054,6 +1218,9 @@ def continue_project(
                 model_name=data.model_name,
                 hf_api_key=x_hf_api_key,
                 canon_context_pack=pack if canon_engine_enabled() else None,
+                min_words=min_w,
+                max_words=max_w,
+                rolling_summary=r_summary,
             )
             if scope:
                 try:
@@ -1073,6 +1240,13 @@ def continue_project(
         db.commit()
         db.refresh(project)
 
+        # Generate rolling summary
+        load_dotenv(override=True)
+        env_key = os.getenv("hf_key_read")
+        api_key = (x_hf_api_key or "").strip() or (env_key or "").strip()
+        if api_key:
+            generate_rolling_summary(db, pid, project_obj.content, data.language, api_key)
+
         db.add(
             models.ProjectContextEntry(
                 project_id=cast(UUID, project_obj.id),
@@ -1089,6 +1263,9 @@ def continue_project(
         title=str(project_obj.title),
         prompt=str(project_obj.prompt),
         content=str(project_obj.content),
+        rolling_summary=getattr(project_obj, "rolling_summary", None),
+        min_words=getattr(project_obj, "min_words", 1000),
+        max_words=getattr(project_obj, "max_words", 2000),
     )
 
 
@@ -1114,7 +1291,10 @@ def get_project_by_id(project_id: str, db: Session = Depends(get_db), current_us
         id=str(project_obj.id),
         title=str(project_obj.title),
         prompt=str(project_obj.prompt),
-        content=str(project_obj.content)
+        content=str(project_obj.content),
+        rolling_summary=getattr(project_obj, "rolling_summary", None),
+        min_words=getattr(project_obj, "min_words", 1000),
+        max_words=getattr(project_obj, "max_words", 2000),
     )
 
 

@@ -1,1 +1,7 @@
 CONTEXT.md
+
+# Ignore openspec, report and all dotfiles
+*openspec*
+*report*
+.*
+!.gitignore

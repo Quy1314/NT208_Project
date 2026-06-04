@@ -109,6 +109,9 @@ CREATE TABLE IF NOT EXISTS projects (
     prompt TEXT NOT NULL DEFAULT '',
     content TEXT NOT NULL DEFAULT '',
     summary TEXT,
+    rolling_summary TEXT,
+    min_words INTEGER DEFAULT 1000,
+    max_words INTEGER DEFAULT 2000,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMPTZ
@@ -116,6 +119,7 @@ CREATE TABLE IF NOT EXISTS projects (
 
 -- Lịch sử từng lượt sinh nội dung (đồng bộ backend SQLAlchemy: project_context_entries).
 -- ON DELETE CASCADE: xóa project thì xóa hết dòng context phụ thuộc.
+-- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS project_context_entries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -124,11 +128,6 @@ CREATE TABLE IF NOT EXISTS project_context_entries (
     generated_content TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
--- Nếu bảng đã tạo trước đó mà thiếu CASCADE trên FK, chạy tay:
--- ALTER TABLE project_context_entries DROP CONSTRAINT IF EXISTS project_context_entries_project_id_fkey;
--- ALTER TABLE project_context_entries ADD CONSTRAINT project_context_entries_project_id_fkey
---   FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
 
 -- Bảng tương thích phản ánh model SQLAlchemy hiện tại.
 -- Chỉ thêm mới để bootstrap schema khớp với Base.metadata.create_all().
@@ -361,7 +360,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- --------------------
 -- Indexes
 -- --------------------
--- Index lõi cho định danh và tương thích.
 CREATE INDEX IF NOT EXISTS idx_users_status_deleted_at ON users(status, deleted_at);
 CREATE INDEX IF NOT EXISTS idx_users_last_login_at ON users(last_login_at DESC);
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
@@ -375,7 +373,6 @@ CREATE INDEX IF NOT EXISTS idx_audio_files_project_id ON audio_files(project_id)
 CREATE INDEX IF NOT EXISTS idx_audio_jobs_user_id ON audio_jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audio_jobs_status_created_at ON audio_jobs(status, created_at DESC);
 
--- Index cho cộng tác và dashboard project.
 CREATE INDEX IF NOT EXISTS idx_teams_owner_id ON teams(owner_id);
 CREATE INDEX IF NOT EXISTS idx_teams_owner_active ON teams(owner_id, created_at DESC) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_team_members_user_role ON team_members(user_id, role);
@@ -406,7 +403,6 @@ CREATE INDEX IF NOT EXISTS idx_tags_team_name ON tags(team_id, name);
 CREATE INDEX IF NOT EXISTS idx_attachments_project_id ON attachments(project_id);
 CREATE INDEX IF NOT EXISTS idx_attachments_chapter_id ON attachments(chapter_id);
 
--- Index cho queue/lịch sử sinh AI.
 CREATE INDEX IF NOT EXISTS idx_ai_models_provider_active ON ai_models(provider_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_prompt_templates_owner ON prompt_templates(owner_id);
 CREATE INDEX IF NOT EXISTS idx_prompt_templates_team ON prompt_templates(team_id);
@@ -418,14 +414,12 @@ CREATE INDEX IF NOT EXISTS idx_generation_requests_queue ON generation_requests(
 CREATE INDEX IF NOT EXISTS idx_generation_requests_project_history ON generation_requests(project_id, requested_at DESC);
 CREATE INDEX IF NOT EXISTS idx_generation_outputs_created_at ON generation_outputs(created_at DESC);
 
--- Index cho quản trị/audit.
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_user_id ON audit_logs(actor_user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_project_id ON audit_logs(project_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_team_id ON audit_logs(team_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
 
--- Index JSONB GIN chọn lọc cho field thường lọc/tìm kiếm.
 CREATE INDEX IF NOT EXISTS idx_generation_requests_parameters_gin ON generation_requests USING GIN (parameters);
 CREATE INDEX IF NOT EXISTS idx_generation_outputs_raw_response_gin ON generation_outputs USING GIN (raw_response);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_metadata_gin ON audit_logs USING GIN (metadata);
@@ -469,9 +463,8 @@ BEFORE UPDATE ON prompt_templates
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- --------------------
--- Nhóm Canon / Lore (từ migration 002)
+-- Nhóm Canon / Lore
 -- --------------------
--- canon_scope: mỗi project một scope (MVP)
 CREATE TABLE IF NOT EXISTS canon_scope (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
@@ -594,20 +587,6 @@ CREATE INDEX IF NOT EXISTS ix_lore_chunk_scope_chapter ON lore_chunk(scope_id, c
 CREATE INDEX IF NOT EXISTS ix_lore_chunk_scope_source ON lore_chunk(scope_id, source, created_at DESC);
 CREATE INDEX IF NOT EXISTS ix_lore_chunk_entities_gin ON lore_chunk USING GIN (entity_ids);
 
--- Đường dẫn vector search tùy chọn:
--- 1) Cài pgvector riêng khi môi trường deploy hỗ trợ:
---    CREATE EXTENSION IF NOT EXISTS vector;
--- 2) Chọn kích thước embedding cố định cho model embedding đã chọn.
--- 3) Trong migration riêng, thêm/chuyển cột vector, backfill dữ liệu, ANALYZE,
---    rồi tạo ANN index ngoài transaction cho bảng lớn đã có dữ liệu.
--- Chỉ là ví dụ, dimension phải khớp model embedding:
--- ALTER TABLE lore_chunk ADD COLUMN embedding_vec vector(1536);
--- CREATE INDEX CONCURRENTLY ix_lore_chunk_embedding_vec_ivfflat ON lore_chunk
---   USING ivfflat (embedding_vec vector_cosine_ops) WITH (lists = 100);
-
--- --------------------
--- Visual bible & assets
--- --------------------
 CREATE TABLE IF NOT EXISTS visual_bible (
     scope_id UUID PRIMARY KEY REFERENCES canon_scope(id) ON DELETE CASCADE,
     style_pack_json JSONB NOT NULL DEFAULT '{}',
@@ -631,7 +610,6 @@ CREATE INDEX IF NOT EXISTS ix_lore_asset_scope ON lore_asset(scope_id);
 CREATE INDEX IF NOT EXISTS ix_lore_asset_scope_kind ON lore_asset(scope_id, kind);
 CREATE INDEX IF NOT EXISTS ix_lore_asset_meta_gin ON lore_asset USING GIN (meta_json);
 
--- Index tra cứu canon/lore và JSONB đặt gần domain để dễ đọc.
 CREATE INDEX IF NOT EXISTS ix_canon_event_scope_t_desc ON canon_event(scope_id, t_index DESC);
 CREATE INDEX IF NOT EXISTS ix_canon_event_scope_chapter_scene ON canon_event(scope_id, chapter_no, scene_no);
 CREATE INDEX IF NOT EXISTS ix_canon_event_payload_gin ON canon_event USING GIN (payload_json);

@@ -3,12 +3,16 @@ export type ProjectCreateRequest = {
   prompt: string;
   language: "vietnamese" | "english";
   modelName: string;
+  minWords?: number;
+  maxWords?: number;
 };
 
 export type ProjectContinueRequest = {
   prompt: string;
   language: "vietnamese" | "english";
   modelName: string;
+  minWords?: number;
+  maxWords?: number;
 };
 
 export type ChangePasswordRequest = {
@@ -39,6 +43,8 @@ export function toProjectCreateApiPayload(request: ProjectCreateRequest) {
     prompt: request.prompt,
     language: request.language,
     model_name: request.modelName,
+    min_words: request.minWords,
+    max_words: request.maxWords,
   };
 }
 
@@ -47,8 +53,11 @@ export function toProjectContinueApiPayload(request: ProjectContinueRequest) {
     prompt: request.prompt,
     language: request.language,
     model_name: request.modelName,
+    min_words: request.minWords,
+    max_words: request.maxWords,
   };
 }
+
 
 export function toChangePasswordApiPayload(request: ChangePasswordRequest) {
   return {
