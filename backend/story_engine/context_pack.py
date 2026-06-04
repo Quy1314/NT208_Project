@@ -49,12 +49,13 @@ def build_story_context_pack(
     structured = format_structured_context_pack(db, scope.id, focus_character_slug)
 
     sem_lines: list[str] = []
-    try:
-        hits = semantic_search_chunks(db, scope.id, instruction, hf_api_key, top_k=6)
-        for txt, score in hits:
-            sem_lines.append(f"(sim={score:.3f}) {txt[:1200]}")
-    except Exception as e:
-        sem_lines.append(f"(semantic retrieval unavailable: {e})")
+    if instruction and instruction.strip():
+        try:
+            hits = semantic_search_chunks(db, scope.id, instruction, hf_api_key, top_k=6)
+            for txt, score in hits:
+                sem_lines.append(f"(sim={score:.3f}) {txt[:1200]}")
+        except Exception as e:
+            sem_lines.append(f"(semantic retrieval unavailable: {e})")
 
     sem_block = "=== SEMANTIC LORE SNIPPETS ===\n" + ("\n---\n".join(sem_lines) if sem_lines else "(none)")
 
@@ -103,17 +104,18 @@ def build_context_messages(
     scope = ensure_canon_scope(db, project_id)
     retrieved_chunks = []
     retrieval_started = time.perf_counter()
-    try:
-        hits = vector_store.search(db, scope.id, latest_user_message, hf_api_key, top_k=top_k)
-        for hit in hits:
-            txt = hit.get("text", "")
-            if txt.strip():
-                retrieved_chunks.append(txt.strip())
-    except Exception as e:
-        logger.warning(
-            "build_context_messages semantic_search_failed error_type=%s",
-            type(e).__name__,
-        )
+    if latest_user_message and latest_user_message.strip():
+        try:
+            hits = vector_store.search(db, scope.id, latest_user_message, hf_api_key, top_k=top_k)
+            for hit in hits:
+                txt = hit.get("text", "")
+                if txt.strip():
+                    retrieved_chunks.append(txt.strip())
+        except Exception as e:
+            logger.warning(
+                "build_context_messages semantic_search_failed error_type=%s",
+                type(e).__name__,
+            )
     retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
 
     retrieved_context_text = "\n---\n".join(retrieved_chunks) if retrieved_chunks else "(none)"
@@ -172,18 +174,20 @@ def build_context_messages(
             )
 
     if language_label == "english":
+        instruction_str = f"Current instruction: {latest_user_message}\n" if latest_user_message.strip() else "Continue the story naturally and logically based on the previous context.\n"
         user_content = (
             f"Write the next part of this story in {language_label}.\n"
             f"Title: {title}\n"
-            f"Current instruction: {latest_user_message}\n"
+            f"{instruction_str}"
         )
         if length_constraint:
             user_content += f"\n{length_constraint}"
     else:
+        instruction_str = f"Yêu cầu hiện tại: {latest_user_message}\n" if latest_user_message.strip() else "Hãy tiếp tục phát triển câu chuyện một cách tự nhiên và logic dựa trên bối cảnh trước đó.\n"
         user_content = (
             f"Hãy viết tiếp nội dung truyện sáng tạo bằng {language_label}.\n"
             f"Tiêu đề: {title}\n"
-            f"Yêu cầu hiện tại: {latest_user_message}\n"
+            f"{instruction_str}"
             "Ràng buộc bắt buộc:\n"
             "- Chỉ dùng tiếng Việt, tuyệt đối không chèn câu tiếng Anh.\n"
             "- Nếu có thuật ngữ riêng (Pokemon, Team Rocket, Gym), giữ nguyên tên riêng, còn lại viết tiếng Việt tự nhiên.\n"

@@ -1360,13 +1360,14 @@ export default function DashboardPage() {
 
   const handleContinueProject = async () => {
     if (!selectedProject) return;
-    if (!continuePrompt.trim()) {
-      alert("Vui lòng nhập yêu cầu viết tiếp.");
-      return;
-    }
     if (isContinuing) return;
 
     const isTextModel = !isAudioModelId(modelName) && !isImageModelId(modelName) && !isVideoModelId(modelName);
+    if (!isTextModel && !continuePrompt.trim()) {
+      alert("Vui lòng nhập yêu cầu viết tiếp.");
+      return;
+    }
+
     const streamParam = isTextModel ? "?stream=true" : "";
 
     setIsContinuing(true);
@@ -1421,8 +1422,8 @@ export default function DashboardPage() {
                       accumulatedText += payload.text;
                       setSelectedProject(prev => {
                         if (!prev) return null;
-                        const userPromptChunk = `[[USER_PROMPT]]\n${promptText.trim()}`;
-                        const continuationChunk = `${userPromptChunk}\n\n---\n\n${accumulatedText}`;
+                        const userPromptChunk = promptText.trim() ? `[[USER_PROMPT]]\n${promptText.trim()}` : "";
+                        const continuationChunk = userPromptChunk ? `${userPromptChunk}\n\n---\n\n${accumulatedText}` : accumulatedText;
                         const baseContent = prevContent.trim();
                         const fullContent = baseContent ? `${baseContent}\n\n---\n\n{continuationChunk}` : continuationChunk;
                         // Replace standard brace pattern with actual value

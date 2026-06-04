@@ -1151,8 +1151,11 @@ def continue_project(
                         new_chunk += chunk
                         yield f"event: chunk\ndata: {json.dumps({'text': chunk})}\n\n"
 
-                    user_prompt_chunk = f"[[USER_PROMPT]]\n{data.prompt.strip()}"
-                    continuation_chunk = f"{user_prompt_chunk}\n\n---\n\n{new_chunk}"
+                    if data.prompt and data.prompt.strip():
+                        user_prompt_chunk = f"[[USER_PROMPT]]\n{data.prompt.strip()}"
+                        continuation_chunk = f"{user_prompt_chunk}\n\n---\n\n{new_chunk}"
+                    else:
+                        continuation_chunk = new_chunk
                     
                     proj = db.query(models.Project).filter(models.Project.id == pid).first()
                     if proj:
@@ -1190,8 +1193,11 @@ def continue_project(
                 except Exception as stream_err:
                     print(f"[ERROR] Stream generator error: {stream_err}")
                     if new_chunk.strip():
-                        user_prompt_chunk = f"[[USER_PROMPT]]\n{data.prompt.strip()}"
-                        continuation_chunk = f"{user_prompt_chunk}\n\n---\n\n{new_chunk}"
+                        if data.prompt and data.prompt.strip():
+                            user_prompt_chunk = f"[[USER_PROMPT]]\n{data.prompt.strip()}"
+                            continuation_chunk = f"{user_prompt_chunk}\n\n---\n\n{new_chunk}"
+                        else:
+                            continuation_chunk = new_chunk
                         proj = db.query(models.Project).filter(models.Project.id == pid).first()
                         if proj:
                             proj_obj = cast(Any, proj)
@@ -1230,8 +1236,11 @@ def continue_project(
 
     if not stream:
         project_obj = cast(Any, project)
-        user_prompt_chunk = f"[[USER_PROMPT]]\n{data.prompt.strip()}"
-        continuation_chunk = f"{user_prompt_chunk}\n\n---\n\n{new_chunk}"
+        if data.prompt and data.prompt.strip():
+            user_prompt_chunk = f"[[USER_PROMPT]]\n{data.prompt.strip()}"
+            continuation_chunk = f"{user_prompt_chunk}\n\n---\n\n{new_chunk}"
+        else:
+            continuation_chunk = new_chunk
         if project_content and project_content.strip():
             project_obj.content = f"{project_content.rstrip()}\n\n---\n\n{continuation_chunk}"
         else:
