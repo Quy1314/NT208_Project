@@ -193,6 +193,7 @@ type WorkspaceComposerDockProps = {
   setMaxWords: (v: number) => void;
   lengthOption: string;
   setLengthOption: (v: string) => void;
+  queueLength: number;
 };
 
 function WorkspaceComposerDock({
@@ -231,12 +232,14 @@ function WorkspaceComposerDock({
   setMaxWords,
   lengthOption,
   setLengthOption,
+  queueLength,
 }: WorkspaceComposerDockProps) {
   if (!isVisible) return null;
 
   const isVideo = isVideoModel;
   const isBusy = isVideo ? isGeneratingVideo : selectedProject ? isContinuing : isGenerating;
   const safeModel = allModelIds.includes(modelName) ? modelName : allModelIds[0];
+  const isTextModel = !isAudioModel && !isImageModel && !isVideo;
 
   const placeholderText = isVideo
     ? "Mô tả cảnh / nội dung video bạn muốn tạo..."
@@ -273,7 +276,9 @@ function WorkspaceComposerDock({
         ? "Đang tạo ảnh..."
         : isAudioModel
           ? "Đang tạo audio..."
-          : "Đang viết tiếp..."
+          : queueLength > 0
+            ? `Đang viết tiếp... (Hàng đợi: ${queueLength})`
+            : "Đang viết tiếp..."
       : isImageModel
         ? "Đang tạo ảnh..."
         : isAudioModel
@@ -291,6 +296,14 @@ function WorkspaceComposerDock({
           data-testid="workspace-composer-input"
           value={selectedProject ? continuePrompt : prompt}
           onChange={(e) => (selectedProject ? setContinuePrompt(e.target.value) : setPrompt(e.target.value))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (!isBusy || (selectedProject && isTextModel && continuePrompt.trim())) {
+                onSubmit();
+              }
+            }
+          }}
           placeholder={placeholderText}
           className={`w-full max-h-32 min-h-[60px] p-3 border-0 shadow-none focus-visible:ring-0 resize-none bg-transparent font-medium ${
             isDark ? "text-[#f3f4f6] placeholder-[#6b7280]" : "text-slate-900 placeholder-slate-400"
@@ -500,9 +513,9 @@ function WorkspaceComposerDock({
             <Button
               data-testid="workspace-submit-button"
               onClick={onSubmit}
-              disabled={isBusy}
+              disabled={isBusy && (!selectedProject || !isTextModel || !continuePrompt.trim())}
               className={`ml-2 text-sm font-bold text-white px-5 py-2.5 rounded-xl transition-all shadow-md cursor-pointer ${
-                isBusy
+                isBusy && (!selectedProject || !isTextModel || !continuePrompt.trim())
                   ? "bg-indigo-500/50 cursor-not-allowed"
                   : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 hover:shadow-lg"
               }`}
@@ -619,6 +632,8 @@ export default function DashboardPage() {
   const [isRecording, setIsRecording] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const continueQueueRef = useRef<string[]>([]);
+  const [queueLength, setQueueLength] = useState(0);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1358,11 +1373,26 @@ export default function DashboardPage() {
     }
   };
 
-  const handleContinueProject = async () => {
+  const handleContinueProject = async (overridePrompt?: string) => {
     if (!selectedProject) return;
-    if (isContinuing) return;
 
     const isTextModel = !isAudioModelId(modelName) && !isImageModelId(modelName) && !isVideoModelId(modelName);
+    const promptText = overridePrompt !== undefined ? overridePrompt : continuePrompt;
+
+    if (isContinuing) {
+      if (isTextModel) {
+        let queuedPrompt = promptText;
+        if (attachedFile && attachedFileContent) {
+          queuedPrompt = `${promptText}\n\n--- [Nội dung file: ${attachedFile.name}] ---\n${attachedFileContent}\n---`;
+          clearAttachedFile();
+        }
+        continueQueueRef.current.push(queuedPrompt);
+        setQueueLength(continueQueueRef.current.length);
+        setContinuePrompt("");
+      }
+      return;
+    }
+
     if (!isTextModel && !continuePrompt.trim()) {
       alert("Vui lòng nhập yêu cầu viết tiếp.");
       return;
@@ -1372,13 +1402,14 @@ export default function DashboardPage() {
 
     setIsContinuing(true);
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
-    const promptText = continuePrompt;
     let finalPromptText = promptText;
-    if (attachedFile && attachedFileContent) {
+    if (overridePrompt === undefined && attachedFile && attachedFileContent) {
       finalPromptText = `${promptText}\n\n--- [Nội dung file: ${attachedFile.name}] ---\n${attachedFileContent}\n---`;
+      clearAttachedFile();
+    } else if (overridePrompt === undefined) {
+      clearAttachedFile();
     }
     setContinuePrompt("");
-    clearAttachedFile();
     const prevContent = selectedProject.content || "";
 
     try {
@@ -1470,13 +1501,26 @@ export default function DashboardPage() {
           /* ignore */
         }
         alert(msg);
-        setContinuePrompt(promptText);
+        if (overridePrompt === undefined) {
+          setContinuePrompt(promptText);
+        }
       }
     } catch (e) {
       console.error(e);
-      setContinuePrompt(promptText);
+      if (overridePrompt === undefined) {
+        setContinuePrompt(promptText);
+      }
     } finally {
       setIsContinuing(false);
+      setTimeout(() => {
+        if (continueQueueRef.current.length > 0) {
+          const nextPrompt = continueQueueRef.current.shift();
+          setQueueLength(continueQueueRef.current.length);
+          if (nextPrompt !== undefined) {
+            void handleContinueProject(nextPrompt);
+          }
+        }
+      }, 100);
     }
   };
 
@@ -1985,6 +2029,7 @@ export default function DashboardPage() {
             setMaxWords={setMaxWords}
             lengthOption={lengthOption}
             setLengthOption={setLengthOption}
+            queueLength={queueLength}
           />
 
           {isProfileOpen && (
