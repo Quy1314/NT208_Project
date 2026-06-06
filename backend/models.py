@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, ForeignKey, TIMESTAMP, Boolean, Integer
+from sqlalchemy import Column, String, Text, ForeignKey, TIMESTAMP, Boolean, Integer, Float, UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -26,12 +26,39 @@ class Project(Base):
     prompt = Column(Text, nullable=False)
     content = Column(Text, nullable=False, server_default="")
     rolling_summary = Column(Text, nullable=True)
+    story_bible = Column(Text, nullable=True)
+    outline = Column(Text, nullable=True)
     min_words = Column(Integer, nullable=True, default=1000, server_default="1000")
     max_words = Column(Integer, nullable=True, default=2000, server_default="2000")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
     context_entries = relationship("ProjectContextEntry", back_populates="project")
+    chapters = relationship("Chapter", back_populates="project", cascade="all, delete-orphan")
+
+
+class Chapter(Base):
+    __tablename__ = "chapters"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    chapter_number = Column(Integer, nullable=False)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False, default="")
+    word_count = Column(Integer, nullable=False, default=0)
+    status = Column(String(20), nullable=False, default="pending", server_default="pending")
+    generation_time = Column(Float, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    project = relationship("Project", back_populates="chapters")
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "chapter_number", name="uq_project_chapter_number"),
+        Index("ix_chapters_project_status", "project_id", "status"),
+    )
+
 
 
 

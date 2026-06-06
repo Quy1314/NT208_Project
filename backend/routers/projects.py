@@ -1296,15 +1296,33 @@ def get_project_by_id(project_id: str, db: Session = Depends(get_db), current_us
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập Project này.")
 
     project_obj = cast(Any, project)
+    
+    # Query chapters ordered by chapter_number for modular chapter support
+    chapters = db.query(models.Chapter).filter(models.Chapter.project_id == pid).order_by(models.Chapter.chapter_number.asc()).all()
+    if chapters:
+        assembled_content = ""
+        for idx, ch in enumerate(chapters):
+            chapter_header = f"# Chương {ch.chapter_number}: {ch.title}"
+            # Format: Include title and content
+            chapter_body = f"{chapter_header}\n\n{ch.content}"
+            if idx == 0:
+                assembled_content = chapter_body
+            else:
+                assembled_content = f"{assembled_content}\n\n---\n\n{chapter_body}"
+        project_content = assembled_content
+    else:
+        project_content = str(project_obj.content or "")
+
     return models.ProjectResponse(
         id=str(project_obj.id),
         title=str(project_obj.title),
         prompt=str(project_obj.prompt),
-        content=str(project_obj.content),
+        content=project_content,
         rolling_summary=getattr(project_obj, "rolling_summary", None),
         min_words=getattr(project_obj, "min_words", 1000),
         max_words=getattr(project_obj, "max_words", 2000),
     )
+
 
 
 @router.get("/{project_id}/contexts")
