@@ -11,16 +11,6 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL is None:
     raise RuntimeError("DATABASE_URL is not configured. Set it in backend/.env or the environment.")
 
-# Clean up DATABASE_URL and clear PG environment variables to prevent libpq pollution on Vercel
-DATABASE_URL = DATABASE_URL.strip('"\'')
-import os
-for pg_var in list(os.environ.keys()):
-    if pg_var.startswith("PG") and pg_var != "PGOPTIONS":  # Keep PGOPTIONS for debugging if needed, or clear it too
-        del os.environ[pg_var]
-if "PGOPTIONS" in os.environ:
-    del os.environ["PGOPTIONS"]
-
-
 # Tối ưu hóa Database Connection Pooling cho Production và Serverless
 # Lưu ý: Khi deploy dự án lên Serverless (như Vercel) hoặc các container tự động scale (Render):
 # - Ưu tiên cấu hình DATABASE_URL trỏ tới Supabase Connection Pooler (Transaction mode, cổng 6543) để tránh cạn kiệt kết nối DB.
