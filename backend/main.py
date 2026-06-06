@@ -154,23 +154,12 @@ def test_db():
     API dùng để test kết nối tới database Supabase PostgreSQL.
     Nó sẽ thử chạy câu lệnh SELECT 1 cơ bản nhất.
     """
-    masked_env = {}
-    for k, v in os.environ.items():
-        if len(v) > 4:
-            masked_env[k] = f"{v[:2]}...{v[-2:]} (len={len(v)})"
-        else:
-            masked_env[k] = f"*** (len={len(v)})"
     try:
         with engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
             return {
                 "message": "Database connection successful",
                 "result": result.scalar(),
-                "env": masked_env
             }
     except Exception as e:
-        return {
-            "message": "Database connection failed",
-            "error": str(e),
-            "env": masked_env
-        }
+        return {"message": "Database connection failed", "error": str(e)}
