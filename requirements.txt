@@ -18,3 +18,5 @@ fal-client>=0.5
 PyJWT>=2.8
 pyreadline3>=3.5; platform_system == "Windows"
 audioop-lts>=0.2.0; python_version >= "3.13"
+arq>=0.28.0
+redis>=5.3.1
