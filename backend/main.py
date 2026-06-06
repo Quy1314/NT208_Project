@@ -1,6 +1,16 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import os
+import sys
+
+# Kiểm tra an toàn bảo mật môi trường Production
+if os.getenv("ENV") == "production":
+    jwt_secret = os.getenv("JWT_SECRET_KEY")
+    if not jwt_secret or jwt_secret.strip() == "" or jwt_secret.strip().lower() == "secret":
+        print("CRITICAL SECURITY ERROR: JWT_SECRET_KEY must be set to a secure value in production!")
+        sys.exit("Startup blocked: Insecure or missing JWT_SECRET_KEY on production.")
+
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 import os

@@ -3,14 +3,15 @@ import time
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 import models
 from auth import get_current_user
 from database import get_db
 from services.audio_pipeline import generate_audio_from_text, get_audio_upload_dir, to_mp3_if_possible
-from services.worker import process_audio_job
+from services.storage import get_signed_url
+from arq_app import get_redis_pool
 
 router = APIRouter(prefix="/api/audio", tags=["Audio"])
 
@@ -26,8 +27,15 @@ def _safe_uuid(value: str, message: str) -> UUID:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message) from exc
 
 
+def run_audio_job_sync_fallback(job_id: UUID, fpt_api_key: str | None):
+    import asyncio
+    from services.worker import process_audio_job_async
+    # Chạy task async trong môi trường sync fallback của BackgroundTasks
+    asyncio.run(process_audio_job_async(None, str(job_id), fpt_api_key))
+
+
 @router.post("/jobs", response_model=models.AudioJobCreateResp, status_code=status.HTTP_202_ACCEPTED)
-def create_audio_job(
+async def create_audio_job(
     data: models.AudioJobCreateReq,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -57,7 +65,28 @@ def create_audio_job(
     db.commit()
     db.refresh(job)
 
-    background_tasks.add_task(process_audio_job, job.id, x_fpt_api_key)
+    use_async_worker = os.getenv("USE_ASYNC_AUDIO_WORKER", "true").lower() == "true"
+    
+    if use_async_worker:
+        try:
+            redis = await get_redis_pool()
+            await redis.enqueue_job('process_audio_job_async', str(job.id), x_fpt_api_key)
+            print(f"[API] Audio job {job.id} enqueued to ARQ Redis worker.")
+        except Exception as e:
+            print(f"[API] Failed to enqueue to Redis worker: {e}")
+            if os.getenv("ENV") == "production":
+                db.delete(job)
+                db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Không thể xếp hàng tác vụ trên production (Lỗi kết nối Redis)."
+                ) from e
+            # Fallback chạy nền sync bằng BackgroundTasks ở local dev
+            print("[API] Falling back to sync FastAPI background task.")
+            background_tasks.add_task(run_audio_job_sync_fallback, job.id, x_fpt_api_key)
+    else:
+        background_tasks.add_task(run_audio_job_sync_fallback, job.id, x_fpt_api_key)
+        
     return models.AudioJobCreateResp(job_id=str(job.id), status="queued")
 
 
@@ -79,7 +108,17 @@ def get_audio_job_status(
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio job không tồn tại.")
 
-    audio_url = _build_public_audio_url(job.id) if job.status == "done" and job.result_path else None
+    audio_url = None
+    if job.status == "done" and job.result_path:
+        path = job.result_path
+        if path.startswith("private://"):
+            bucket, filename = path[10:].split("/", 1)
+            audio_url = get_signed_url(bucket, filename)
+        elif path.startswith("http://") or path.startswith("https://"):
+            audio_url = path
+        else:
+            audio_url = _build_public_audio_url(job.id)
+
     return models.AudioJobStatusResp(
         job_id=str(job.id),
         status=job.status,
@@ -104,27 +143,56 @@ def stream_audio_file(job_id: str, db: Session = Depends(get_db)):
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Audio chưa sẵn sàng. Trạng thái hiện tại: {audio_job.status}.",
             )
-        if not os.path.exists(audio_job.result_path):
+        
+        path = audio_job.result_path
+        
+        # Nếu lưu dạng private://, sinh signed URL và redirect client
+        if path.startswith("private://"):
+            bucket, filename = path[10:].split("/", 1)
+            signed_url = get_signed_url(bucket, filename)
+            if not signed_url:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không thể tạo liên kết tải file.")
+            return RedirectResponse(url=signed_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+            
+        # Nếu lưu dạng http/https, redirect trực tiếp
+        if path.startswith("http://") or path.startswith("https://"):
+            return RedirectResponse(url=path, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+        # Fallback local file
+        if not os.path.exists(path):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file audio trên server.")
 
-        media_type = "audio/mpeg" if audio_job.result_path.lower().endswith(".mp3") else "audio/wav"
+        media_type = "audio/mpeg" if path.lower().endswith(".mp3") else "audio/wav"
         return FileResponse(
-            path=audio_job.result_path,
+            path=path,
             media_type=media_type,
-            filename=os.path.basename(audio_job.result_path),
+            filename=os.path.basename(path),
         )
 
     audio_file = db.query(models.AudioFile).filter(models.AudioFile.id == jid).first()
     if not audio_file:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audio không tồn tại.")
-    if not audio_file.audio_url or not os.path.exists(audio_file.audio_url):
+    if not audio_file.audio_url:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file audio trên server.")
+        
+    path = audio_file.audio_url
+    if path.startswith("http://") or path.startswith("https://") or path.startswith("private://"):
+        if path.startswith("private://"):
+            bucket, filename = path[10:].split("/", 1)
+            signed_url = get_signed_url(bucket, filename)
+            if not signed_url:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không thể tạo liên kết tải file.")
+            return RedirectResponse(url=signed_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+        return RedirectResponse(url=path, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+    if not os.path.exists(path):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy file audio trên server.")
 
-    media_type = "audio/mpeg" if audio_file.audio_url.lower().endswith(".mp3") else "audio/wav"
+    media_type = "audio/mpeg" if path.lower().endswith(".mp3") else "audio/wav"
     return FileResponse(
-        path=audio_file.audio_url,
+        path=path,
         media_type=media_type,
-        filename=os.path.basename(audio_file.audio_url),
+        filename=os.path.basename(path),
     )
 
 

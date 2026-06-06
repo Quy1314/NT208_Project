@@ -33,47 +33,8 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-class EmailBloomFilter:
-    def __init__(self, bit_size: int = 200_003, hash_count: int = 7):
-        self.bit_size = bit_size
-        self.hash_count = hash_count
-        self.bits = bytearray((bit_size + 7) // 8)
-
-    def _hash_indices(self, value: str):
-        normalized = value.strip().lower().encode("utf-8")
-        digest1 = int(hashlib.sha256(normalized).hexdigest(), 16)
-        digest2 = int(hashlib.md5(normalized).hexdigest(), 16)
-        for i in range(self.hash_count):
-            yield (digest1 + i * digest2 + i * i) % self.bit_size
-
-    def add(self, value: str):
-        for idx in self._hash_indices(value):
-            self.bits[idx // 8] |= (1 << (idx % 8))
-
-    def might_contain(self, value: str) -> bool:
-        for idx in self._hash_indices(value):
-            if not (self.bits[idx // 8] & (1 << (idx % 8))):
-                return False
-        return True
-
-
-email_bloom = EmailBloomFilter()
-bloom_initialized = False
-bloom_lock = threading.Lock()
-
-
-def ensure_bloom_loaded(db: Session):
-    global bloom_initialized
-    if bloom_initialized:
-        return
-    with bloom_lock:
-        if bloom_initialized:
-            return
-        users = db.query(models.User.email).all()
-        for (email,) in users:
-            if email:
-                email_bloom.add(email)
-        bloom_initialized = True
+# EmailBloomFilter removed to optimize cold start and support horizontal scaling on Production.
+# Direct database indexed queries are used instead.
 
 # Schema đã được chuyển sang file models.py
 
@@ -81,17 +42,18 @@ def ensure_bloom_loaded(db: Session):
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password[:72])
 
+from sqlalchemy.exc import IntegrityError
+
 @router.post("/register")
 def register_user(user: models.UserRegister, db: Session = Depends(get_db)):
     """
     API đăng ký người dùng mới.
     Quy trình: Kiểm tra email -> Băm mật khẩu -> Lưu xuống CSDL.
     """
-    ensure_bloom_loaded(db)
     normalized_email = user.email.strip().lower()
 
-    # 1. Tra cứu xem email này đã tồn tại trong CSDL chưa
-    db_user = db.query(models.User).filter(models.User.email == user.email).first()
+    # 1. Tra cứu xem email này đã tồn tại trong CSDL chưa (Kiểm tra nhanh trước khi insert)
+    db_user = db.query(models.User).filter(models.User.email == normalized_email).first()
     if db_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -104,9 +66,15 @@ def register_user(user: models.UserRegister, db: Session = Depends(get_db)):
     # 3. Khởi tạo đối tượng User và lưu vào Database (PostgreSQL)
     new_user = models.User(email=normalized_email, password_hash=hashed_password)
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user) # load lại để lấy ID do auto-generate sinh ra
-    email_bloom.add(normalized_email)
+    try:
+        db.commit()
+        db.refresh(new_user) # load lại để lấy ID do auto-generate sinh ra
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email này đã được đăng ký."
+        )
     
     # 4. Trả kết quả JSON về báo hiệu đăng ký thành công
     return {
@@ -121,16 +89,9 @@ def register_user(user: models.UserRegister, db: Session = Depends(get_db)):
 @router.get("/check-user")
 def check_user_exists(email: str = Query(..., min_length=3), db: Session = Depends(get_db)):
     """
-    Kiểm tra user tồn tại nhanh bằng Bloom filter.
-    - Nếu Bloom trả về false -> chắc chắn chưa tồn tại.
-    - Nếu Bloom trả về true -> kiểm tra lại DB để xác nhận.
+    Kiểm tra user tồn tại nhanh trực tiếp bằng truy vấn DB.
     """
-    ensure_bloom_loaded(db)
     normalized_email = email.strip().lower()
-
-    if not email_bloom.might_contain(normalized_email):
-        return {"exists": False}
-
     exists = db.query(models.User).filter(models.User.email == normalized_email).first() is not None
     return {"exists": exists}
 
@@ -217,14 +178,8 @@ def login_user(form_data: OAuth2PasswordRequestForm = Depends(), is_remember: bo
 
 @router.post("/forgot-password")
 def forgot_password(data: models.ForgotPasswordRequest, db: Session = Depends(get_db)):
-    ensure_bloom_loaded(db)
     normalized_email = data.email.strip().lower()
 
-    # Bloom filter trả false => chắc chắn chưa tồn tại.
-    if not email_bloom.might_contain(normalized_email):
-        return {"message": "Tài khoản không tồn tại."}
-
-    # Bloom trả true => cần xác nhận lại DB (tránh false positive).
     db_user = db.query(models.User).filter(models.User.email == normalized_email).first()
     if not db_user:
         return {"message": "Tài khoản không tồn tại."}

@@ -7,7 +7,7 @@ import uuid
 import abc
 from datetime import datetime
 from typing import Any
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 from sqlalchemy.orm import Session
 
 from lore.db_models import CanonScope, LoreChunk, LORE_EMBEDDING_DIM
@@ -93,6 +93,20 @@ class LocalDBVectorStore(VectorStoreInterface):
         top_k: int = 6
     ) -> list[dict[str, Any]]:
         qvec = embed_query(query, hf_api_key)
+        
+        use_pgvector = os.getenv("USE_PGVECTOR_SEARCH", "true").lower() == "true"
+        is_prod = os.getenv("ENV") == "production"
+        
+        if use_pgvector:
+            try:
+                return _perform_pgvector_search(db, scope_id, qvec, top_k)
+            except Exception as e:
+                print(f"[WARN] pgvector search failed: {e}")
+                if is_prod:
+                    raise RuntimeError("pgvector search failed on production. Fallback to in-memory search is disabled.") from e
+                print("[WARN] Falling back to in-memory Python vector similarity search.")
+
+        # Fallback Python in-memory search (only for development)
         rows = (
             db.query(LoreChunk)
             .filter(LoreChunk.scope_id == scope_id, LoreChunk.embedding.isnot(None))
@@ -111,6 +125,26 @@ class LocalDBVectorStore(VectorStoreInterface):
             })
         scored.sort(key=lambda x: x["score"], reverse=True)
         return scored[:top_k]
+
+def _perform_pgvector_search(db: Session, scope_id: uuid.UUID, qvec: list[float], limit: int) -> list[dict[str, Any]]:
+    # Convert qvec to pgvector format '[val1,val2,...]'
+    qvec_str = "[" + ",".join(str(x) for x in qvec) + "]"
+    sql = text("""
+        SELECT text, entity_ids, (1.0 - (embedding <=> :qvec::vector)) AS score
+        FROM lore_chunk
+        WHERE scope_id = :scope_id AND embedding IS NOT NULL
+        ORDER BY embedding <=> :qvec::vector
+        LIMIT :limit
+    """)
+    res = db.execute(sql, {"scope_id": scope_id, "qvec": qvec_str, "limit": limit})
+    results = []
+    for row in res:
+        results.append({
+            "text": row[0],
+            "metadata": row[1] or {},
+            "score": float(row[2]) if row[2] is not None else 0.0
+        })
+    return results
 
 
 vector_store: VectorStoreInterface = LocalDBVectorStore()
@@ -177,8 +211,23 @@ def semantic_search_chunks(
     hf_api_key: str | None,
     top_k: int = TOP_K_DEFAULT,
 ) -> list[tuple[str, float]]:
-    """Trả về chunk_text và điểm similarity bằng cosine Python."""
+    """Trả về chunk_text và điểm similarity bằng cosine."""
     qvec = embed_query(query, hf_api_key)
+    
+    use_pgvector = os.getenv("USE_PGVECTOR_SEARCH", "true").lower() == "true"
+    is_prod = os.getenv("ENV") == "production"
+    
+    if use_pgvector:
+        try:
+            results = _perform_pgvector_search(db, scope_id, qvec, top_k)
+            return [(r["text"], r["score"]) for r in results]
+        except Exception as e:
+            print(f"[WARN] pgvector search failed: {e}")
+            if is_prod:
+                raise RuntimeError("pgvector search failed on production. Fallback to in-memory search is disabled.") from e
+            print("[WARN] Falling back to in-memory Python vector similarity search.")
+
+    # Fallback Python in-memory search (only for development)
     rows = (
         db.query(LoreChunk)
         .filter(LoreChunk.scope_id == scope_id, LoreChunk.embedding.isnot(None))
