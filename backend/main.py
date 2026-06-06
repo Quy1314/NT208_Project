@@ -1,6 +1,22 @@
 import traceback
 import sys
 import os
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+# Định nghĩa check lifespan lúc khởi động server
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if os.getenv("ENV") == "production":
+        jwt_secret = os.getenv("JWT_SECRET_KEY")
+        if not jwt_secret or jwt_secret.strip() == "" or jwt_secret.strip().lower() == "secret":
+            print("CRITICAL SECURITY ERROR: JWT_SECRET_KEY must be set to a secure value in production!")
+            raise RuntimeError("Startup blocked: Insecure or missing JWT_SECRET_KEY on production.")
+    yield
+
+# Khởi tạo application FastAPI chính ở ngoài cùng (indentation level 0) để Vercel build parser nhận diện được
+app = FastAPI(lifespan=lifespan)
 
 try:
     from dotenv import load_dotenv
@@ -9,26 +25,23 @@ try:
     from collections import defaultdict, deque
     from datetime import datetime, timedelta, timezone
     from pathlib import Path
-    from contextlib import asynccontextmanager
 
     BACKEND_DIR = Path(__file__).resolve().parent
     if str(BACKEND_DIR) not in sys.path:
         sys.path.insert(0, str(BACKEND_DIR))
 
-    from fastapi import FastAPI, Request
-    from fastapi.responses import JSONResponse
+    from fastapi import Request
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.staticfiles import StaticFiles
     from sqlalchemy import text
 
     from database import engine, Base
     import models
-    import lore.db_models  # noqa: F401 — registers canonical lore ORM tables on Base.metadata
+    import lore.db_models  # noqa: F401
     import auth
     from routers import projects, teams, audio, canon, video, prompt_templates
 
     # Không tự tạo bảng khi import app trên production/serverless.
-    # Chạy schema/migration riêng thay vì gọi create_all ở cold start Vercel.
     if os.getenv("AUTO_CREATE_TABLES", "false").lower() == "true":
         Base.metadata.create_all(bind=engine)
 
@@ -41,28 +54,12 @@ try:
     OUTPUTS_DIR = _runtime_dir("outputs")
     UPLOADS_DIR = _runtime_dir("uploads")
 
-    # Tạo folder outputs và uploads
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     (UPLOADS_DIR / "audio").mkdir(parents=True, exist_ok=True)
 
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        # Kiểm tra an toàn bảo mật môi trường Production lúc khởi động server
-        if os.getenv("ENV") == "production":
-            jwt_secret = os.getenv("JWT_SECRET_KEY")
-            if not jwt_secret or jwt_secret.strip() == "" or jwt_secret.strip().lower() == "secret":
-                print("CRITICAL SECURITY ERROR: JWT_SECRET_KEY must be set to a secure value in production!")
-                raise RuntimeError("Startup blocked: Insecure or missing JWT_SECRET_KEY on production.")
-        yield
-
-    # Khởi tạo application FastAPI chính
-    app = FastAPI(lifespan=lifespan)
-
-    # Mount folder outputs và uploads để frontend có thể truy cập file tĩnh nếu cần
     app.mount("/outputs", StaticFiles(directory=str(OUTPUTS_DIR)), name="outputs")
     app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
-    # Cấu hình CORS Middleware: Cho phép Frontend gọi API qua Backend
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -77,9 +74,6 @@ try:
         allow_headers=["*"],
     )
 
-    # Rate limit lưu trong memory:
-    # - Tối đa 10 request / 5 giây cho mỗi client.
-    # - Nếu vượt ngưỡng: chặn 5 phút.
     WINDOW_SECONDS = 5
     MAX_REQUESTS_IN_WINDOW = 10
     BLOCK_SECONDS = 300
@@ -88,8 +82,6 @@ try:
 
     @app.middleware("http")
     async def anti_spam_middleware(request: Request, call_next):
-        # Chỉ áp dụng rate limit cho API ghi dữ liệu để tránh block khi F5/UI polling.
-        # Các request GET/OPTIONS/HEAD không bị tính limit.
         if not request.url.path.startswith("/api/") or request.method in {"GET", "OPTIONS", "HEAD"}:
             return await call_next(request)
 
@@ -133,7 +125,6 @@ try:
 
         return await call_next(request)
 
-    # Đăng ký routers
     app.include_router(auth.router)
     app.include_router(projects.router)
     app.include_router(canon.router)
@@ -148,10 +139,6 @@ try:
 
     @app.get("/test-db")
     def test_db():
-        """
-        API dùng để test kết nối tới database Supabase PostgreSQL.
-        Nó sẽ thử chạy câu lệnh SELECT 1 cơ bản nhất.
-        """
         try:
             with engine.connect() as conn:
                 result = conn.execute(text("SELECT 1"))
@@ -163,10 +150,6 @@ try:
             return {"message": "Database connection failed", "error": str(e)}
 
 except BaseException as startup_err:
-    from fastapi import FastAPI
-    from fastapi.responses import JSONResponse
-    app = FastAPI()
-
     @app.get("/{path:path}")
     def fallback(path: str):
         safe_env = {}
