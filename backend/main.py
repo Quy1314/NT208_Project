@@ -149,7 +149,11 @@ try:
         except Exception as e:
             return {"message": "Database connection failed", "error": str(e)}
 
-except BaseException as startup_err:
+except BaseException as err:
+    # Lưu vết lỗi vào biến toàn cục để tránh NameError khi gọi API sau khi khối except đã kết thúc
+    startup_error_str = str(err)
+    startup_error_traceback = traceback.format_exc()
+
     @app.get("/{path:path}")
     def fallback(path: str):
         safe_env = {}
@@ -162,8 +166,8 @@ except BaseException as startup_err:
             status_code=500,
             content={
                 "error": "Startup failed",
-                "detail": str(startup_err),
-                "traceback": traceback.format_exc(),
+                "detail": startup_error_str,
+                "traceback": startup_error_traceback,
                 "env": safe_env
             }
         )
