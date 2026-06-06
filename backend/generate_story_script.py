@@ -339,21 +339,21 @@ def main():
             try:
                 ch_record = save_db.query(models.Chapter).filter(models.Chapter.id == chapter_id).first()
                 if ch_record:
-                    setattr(ch_record, "generation_time", float(duration))
-                    setattr(ch_record, "word_count", int(final_words))
+                    setattr(ch_record, "generation_time", duration)
+                    setattr(ch_record, "word_count", final_words)
                     setattr(ch_record, "updated_at", sa.func.now())
                     
                     if error_message:
-                        setattr(ch_record, "error_message", str(error_message))
+                        setattr(ch_record, "error_message", error_message)
                         if generated_text.strip():
-                            setattr(ch_record, "content", str(generated_text))
+                            setattr(ch_record, "content", generated_text)
                             setattr(ch_record, "status", "partial")
                             print(f"[SAVE] Đã lưu một phần nội dung chương {i} (trạng thái: partial).")
                         else:
                             setattr(ch_record, "status", "failed")
                             print(f"[SAVE] Chương {i} bị lỗi hoàn toàn (trạng thái: failed).")
                     else:
-                        setattr(ch_record, "content", str(generated_text))
+                        setattr(ch_record, "content", generated_text)
                         setattr(ch_record, "status", "completed")
                         setattr(ch_record, "error_message", None)
                         print(f"[SAVE] Lưu thành công Chương {i} (trạng thái: completed, từ: {final_words}).")
