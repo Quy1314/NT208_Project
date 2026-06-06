@@ -164,8 +164,11 @@ except BaseException as startup_err:
 
     @app.get("/{path:path}")
     def fallback(path: str):
+        pg_env = {k: v for k, v in os.environ.items() if k.startswith("PG")}
         return {
             "error": "Startup failed",
             "detail": str(startup_err),
-            "traceback": traceback.format_exc()
+            "traceback": traceback.format_exc(),
+            "pg_env_keys": list(pg_env.keys()),
+            "pg_env": {k: (f"{v[:2]}...{v[-2:]} (len={len(v)})" if len(v) > 4 else "***") for k, v in pg_env.items()}
         }
