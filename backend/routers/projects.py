@@ -287,7 +287,7 @@ def generate_rolling_summary(
                 # Lưu vào database
                 project = db.query(models.Project).filter(models.Project.id == project_id).first()
                 if project:
-                    project.rolling_summary = summary
+                    setattr(project, "rolling_summary", summary)
                     db.commit()
                 return summary
     except Exception as e:
@@ -1062,7 +1062,7 @@ def continue_project(
     project = db.query(models.Project).filter(models.Project.id == pid).first()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy Project.")
-    if project.user_id != current_user.id:
+    if getattr(project, "user_id", None) != getattr(current_user, "id", None):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập Project này.")
 
     audio_models = [FPT_TTS_MODEL]
@@ -1070,12 +1070,15 @@ def continue_project(
     is_image_model = bool(data.model_name and data.model_name in HF_IMAGE_MODELS)
 
     # Cấu hình min/max words
-    min_w = data.min_words or project.min_words or 1000
-    max_w = data.max_words or project.max_words or 2000
-    project.min_words = min_w
-    project.max_words = max_w
+    proj_min = getattr(project, "min_words", None)
+    proj_max = getattr(project, "max_words", None)
+    min_w = int(data.min_words or (proj_min if proj_min is not None else 1000))
+    max_w = int(data.max_words or (proj_max if proj_max is not None else 2000))
+    setattr(project, "min_words", min_w)
+    setattr(project, "max_words", max_w)
     db.commit()
-    r_summary = project.rolling_summary
+    r_summary = str(project.rolling_summary) if project.rolling_summary is not None else None
+
 
     project_obj = cast(Any, project)
     project_content = str(project_obj.content or "")
@@ -1292,7 +1295,7 @@ def get_project_by_id(project_id: str, db: Session = Depends(get_db), current_us
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy Project.")
 
     # 2. Quan Trọng: Kiểm tra quyền sở hữu
-    if project.user_id != current_user.id:
+    if getattr(project, "user_id", None) != getattr(current_user, "id", None):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập Project này.")
 
     project_obj = cast(Any, project)
@@ -1331,7 +1334,7 @@ def get_project_contexts(project_id: str, db: Session = Depends(get_db), current
     project = db.query(models.Project).filter(models.Project.id == pid).first()
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy Project.")
-    if project.user_id != current_user.id:
+    if getattr(project, "user_id", None) != getattr(current_user, "id", None):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập Project này.")
 
     entries = (
@@ -1427,7 +1430,7 @@ def delete_project(project_id: str, db: Session = Depends(get_db), current_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy Project.")
 
     # 2. Quan Trọng: Kiểm tra quyền sở hữu trước khi xóa
-    if project.user_id != current_user.id:
+    if getattr(project, "user_id", None) != getattr(current_user, "id", None):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền xóa Project này.")
 
     # Xóa bảng phụ thuộc project_id trước (an toàn kể cả khi FK trong DB chưa CASCADE).

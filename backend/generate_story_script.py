@@ -124,11 +124,14 @@ def main():
             print(f"Status: Kết nối DB thành công. Không có API token nào bị tiêu tốn.")
             return
 
+        if project is None:
+            raise RuntimeError("Không tìm thấy Project hoặc không khởi tạo được.")
+
         # 3. Sinh hoặc tải lại Story Bible và Chapter Outline
         model_id = "Qwen/Qwen2.5-72B-Instruct"
         
-        has_bible = project.story_bible and project.story_bible.strip()
-        has_outline = project.outline and project.outline.strip()
+        has_bible = bool(project.story_bible and str(project.story_bible).strip())
+        has_outline = bool(project.outline and str(project.outline).strip())
         
         if not has_bible or not has_outline or args.force_regenerate_outline:
             print("[PROCESS] Đang sinh Story Bible mới cho bộ truyện...")
@@ -146,15 +149,15 @@ def main():
             outline = call_llm_with_retry(api_key, model_id, outline_prompt)
             
             # Lưu lại vào Project
-            project.story_bible = story_bible
-            project.outline = outline
+            setattr(project, "story_bible", story_bible)
+            setattr(project, "outline", outline)
             db.commit()
             db.refresh(project)
             print("[SUCCESS] Đã tạo và lưu thành công Story Bible và Outline chương vào database.")
         else:
             print("[INFO] Đã tìm thấy Story Bible và Outline hiện có. Tự động tái sử dụng để giữ mạch truyện thống nhất.")
-            story_bible = project.story_bible
-            outline = project.outline
+            story_bible = str(project.story_bible)
+            outline = str(project.outline)
 
         # 4. Trích xuất tiêu đề chương từ Outline
         # Pattern match: "Chương 1: Tiêu đề"
@@ -190,13 +193,16 @@ def main():
                 ).first()
                 
                 if ch_record:
-                    if ch_record.status == "completed":
+                    status_str = str(ch_record.status)
+                    if status_str == "completed":
                         print(f"[SKIP] Chương {i} đã hoàn thành (completed). Bỏ qua.")
                         check_db.close()
                         continue
-                    elif ch_record.status == "generating":
+                    elif status_str == "generating":
                         now_ts = time.time()
-                        updated_ts = ch_record.updated_at.timestamp() if ch_record.updated_at else 0
+                        from datetime import datetime
+                        updated_at_val = getattr(ch_record, "updated_at", None)
+                        updated_ts = updated_at_val.timestamp() if isinstance(updated_at_val, datetime) else 0
                         time_diff = now_ts - updated_ts
                         if time_diff < 600 and not args.resume_stale:
                             print(f"[SKIP] Chương {i} đang trong trạng thái 'generating' hoạt động (cập nhật {int(time_diff)} giây trước). Bỏ qua để tránh chạy song song/race condition.")
@@ -204,13 +210,13 @@ def main():
                             continue
                         else:
                             print(f"[RESUME] Chương {i} đang bị kẹt hoặc đã quá hạn sinh. Bắt đầu sinh lại...")
-                            ch_record.status = "generating"
-                            ch_record.updated_at = sa.func.now()
+                            setattr(ch_record, "status", "generating")
+                            setattr(ch_record, "updated_at", sa.func.now())
                             check_db.commit()
                     else:
-                        print(f"[RESUME] Chương {i} đang ở trạng thái '{ch_record.status}'. Bắt đầu sinh tiếp...")
-                        ch_record.status = "generating"
-                        ch_record.updated_at = sa.func.now()
+                        print(f"[RESUME] Chương {i} đang ở trạng thái '{status_str}'. Bắt đầu sinh tiếp...")
+                        setattr(ch_record, "status", "generating")
+                        setattr(ch_record, "updated_at", sa.func.now())
                         check_db.commit()
                 else:
                     ch_record = models.Chapter(
@@ -225,7 +231,7 @@ def main():
                     print(f"[INIT] Khởi tạo record cho Chương {i} thành công.")
                 
                 chapter_id = ch_record.id
-                partial_content = ch_record.content or ""
+                partial_content = str(ch_record.content or "")
             finally:
                 check_db.close()
 
@@ -239,9 +245,10 @@ def main():
                         models.Chapter.project_id == project.id,
                         models.Chapter.chapter_number == i - 1
                     ).first()
-                    if prev_ch and prev_ch.content:
+                    prev_content = getattr(prev_ch, "content", "")
+                    if prev_ch is not None and prev_content:
                         # Lấy 2000 ký tự cuối làm narrative bridge
-                        last_chars = prev_ch.content[-2000:]
+                        last_chars = str(prev_content)[-2000:]
                         bridge_text = (
                             f"=== Phần kết của Chương {i-1} (Dùng để kết nối văn cảnh liền mạch) ===\n"
                             f"... {last_chars}\n"
@@ -251,7 +258,7 @@ def main():
                     bridge_db.close()
             
             # Xây dựng Prompt sinh nội dung
-            rolling_summary_val = project.rolling_summary or ""
+            rolling_summary_val = str(project.rolling_summary or "")
             
             system_prompt = (
                 "Bạn là một nhà văn chuyên sáng tác truyện hư cấu tu tiên huyền ảo bằng tiếng Việt.\n"
@@ -332,23 +339,23 @@ def main():
             try:
                 ch_record = save_db.query(models.Chapter).filter(models.Chapter.id == chapter_id).first()
                 if ch_record:
-                    ch_record.generation_time = duration
-                    ch_record.word_count = final_words
-                    ch_record.updated_at = sa.func.now()
+                    setattr(ch_record, "generation_time", float(duration))
+                    setattr(ch_record, "word_count", int(final_words))
+                    setattr(ch_record, "updated_at", sa.func.now())
                     
                     if error_message:
-                        ch_record.error_message = error_message
+                        setattr(ch_record, "error_message", str(error_message))
                         if generated_text.strip():
-                            ch_record.content = generated_text
-                            ch_record.status = "partial"
+                            setattr(ch_record, "content", str(generated_text))
+                            setattr(ch_record, "status", "partial")
                             print(f"[SAVE] Đã lưu một phần nội dung chương {i} (trạng thái: partial).")
                         else:
-                            ch_record.status = "failed"
+                            setattr(ch_record, "status", "failed")
                             print(f"[SAVE] Chương {i} bị lỗi hoàn toàn (trạng thái: failed).")
                     else:
-                        ch_record.content = generated_text
-                        ch_record.status = "completed"
-                        ch_record.error_message = None
+                        setattr(ch_record, "content", str(generated_text))
+                        setattr(ch_record, "status", "completed")
+                        setattr(ch_record, "error_message", None)
                         print(f"[SAVE] Lưu thành công Chương {i} (trạng thái: completed, từ: {final_words}).")
                         
                     save_db.commit()
@@ -388,7 +395,7 @@ def main():
                     # Lưu rolling summary & tạo context entry
                     proj_record = summary_db.query(models.Project).filter(models.Project.id == project.id).first()
                     if proj_record:
-                        proj_record.rolling_summary = new_summary
+                        setattr(proj_record, "rolling_summary", new_summary)
                         
                         context_entry = models.ProjectContextEntry(
                             project_id=project.id,
