@@ -149,6 +149,52 @@ try:
         except Exception as e:
             return {"message": "Database connection failed", "error": str(e)}
 
+    @app.get("/test-storage")
+    def test_storage():
+        import requests
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+        bucket = os.getenv("SUPABASE_BUCKET_NAME", "audio-outputs").strip()
+        
+        if not supabase_url or not supabase_key:
+            return {
+                "status": "FAIL",
+                "message": "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in Vercel environment variables.",
+                "supabase_url": supabase_url,
+                "supabase_key_present": bool(supabase_key)
+            }
+            
+        dummy_data = b"Production connection test file"
+        filename = "production_test_upload.txt"
+        supabase_url = supabase_url.strip().rstrip("/")
+        upload_url = f"{supabase_url}/storage/v1/object/{bucket}/{filename}"
+        
+        headers = {
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "text/plain",
+            "x-upsert": "true"
+        }
+        
+        try:
+            response = requests.post(upload_url, data=dummy_data, headers=headers, timeout=15)
+            if response.status_code == 200:
+                return {
+                    "status": "SUCCESS",
+                    "message": f"Successfully uploaded test file to Supabase bucket '{bucket}' from Vercel production!",
+                    "public_url": f"{supabase_url}/storage/v1/object/public/{bucket}/{filename}"
+                }
+            else:
+                return {
+                    "status": "FAIL",
+                    "message": f"Supabase Storage returned HTTP {response.status_code}",
+                    "details": response.text
+                }
+        except Exception as e:
+            return {
+                "status": "ERROR",
+                "message": str(e)
+            }
+
 except BaseException as err:
     # Lưu vết lỗi vào biến toàn cục để tránh NameError khi gọi API sau khi khối except đã kết thúc
     startup_error_str = str(err)
