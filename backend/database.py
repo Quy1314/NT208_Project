@@ -7,7 +7,7 @@ from pathlib import Path
 dotenv_path = Path(__file__).resolve().with_name(".env")
 load_dotenv(dotenv_path=dotenv_path)
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL")
 if DATABASE_URL is None:
     raise RuntimeError("DATABASE_URL is not configured. Set it in backend/.env or the environment.")
 
