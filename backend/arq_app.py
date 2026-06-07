@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 # Nạp các biến môi trường
 load_dotenv()
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0").strip()
+redis_env = os.getenv("REDIS_URL") or os.getenv("KV_URL") or "redis://127.0.0.1:6379/0"
+REDIS_URL = redis_env.strip()
 
 async def get_redis_pool():
     """

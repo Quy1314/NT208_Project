@@ -15,7 +15,8 @@ load_dotenv(dotenv_path=backend_dir / ".env")
 # Import task xử lý
 from services.worker import process_audio_job_async
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0").strip()
+redis_env = os.getenv("REDIS_URL") or os.getenv("KV_URL") or "redis://127.0.0.1:6379/0"
+REDIS_URL = redis_env.strip()
 
 class WorkerSettings:
     """
