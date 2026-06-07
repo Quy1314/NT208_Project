@@ -273,46 +273,62 @@ export default function VirtualPet({ isDark, isGenerating }: VirtualPetProps) {
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return; 
     resetIdleTimer();
+    
+    // Stop walking/wandering if active
+    if (walkTimeoutRef.current) {
+      clearTimeout(walkTimeoutRef.current);
+      walkTimeoutRef.current = null;
+    }
+    setIsWalking(false);
+    
     setIsDragging(true);
     dragStartOffset.current = {
       x: e.clientX - pos.x,
       y: e.clientY - pos.y
     };
-    e.currentTarget.setPointerCapture(e.pointerId);
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+  useEffect(() => {
     if (!isDragging) return;
-    const nextX = e.clientX - dragStartOffset.current.x;
-    const nextY = e.clientY - dragStartOffset.current.y;
-    
-    const clampedX = Math.max(20, Math.min(nextX, window.innerWidth - 80));
-    const clampedY = Math.max(20, Math.min(nextY, window.innerHeight - 100));
-    
-    setPos({ x: clampedX, y: clampedY });
-  };
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging) return;
-    setIsDragging(false);
-    e.currentTarget.releasePointerCapture(e.pointerId);
-    
-    anchorPosRef.current = { ...pos };
-    
-    setPetState("happy");
-    triggerBubble(
-      petType === "robot" ? "Mục tiêu đỗ thành công! 🤖📍" :
-      petType === "cat" ? "Sen đặt xuống nhẹ nhàng thế là tốt meo~ 🐾" : 
-      petType === "dog" ? "Đặt tui ở đây canh gác nhé! Gâu! 🐕" : 
-      petType === "bunny" ? "Thỏ ta hạ cánh an toàn! 🐰" : 
-      "Thả tui xuống ao nước đi! Cạp! 🦆"
-    );
+    const handleGlobalPointerMove = (e: PointerEvent) => {
+      const nextX = e.clientX - dragStartOffset.current.x;
+      const nextY = e.clientY - dragStartOffset.current.y;
+      
+      const clampedX = Math.max(20, Math.min(nextX, window.innerWidth - 80));
+      const clampedY = Math.max(20, Math.min(nextY, window.innerHeight - 100));
+      
+      setPos({ x: clampedX, y: clampedY });
+    };
 
-    if (actionTimeoutRef.current) clearTimeout(actionTimeoutRef.current);
-    actionTimeoutRef.current = setTimeout(() => {
-      setPetState("idle");
-    }, 3000);
-  };
+    const handleGlobalPointerUp = () => {
+      setIsDragging(false);
+      
+      anchorPosRef.current = { ...pos };
+      
+      setPetState("happy");
+      triggerBubble(
+        petType === "robot" ? "Mục tiêu đỗ thành công! 🤖📍" :
+        petType === "cat" ? "Sen đặt xuống nhẹ nhàng thế là tốt meo~ 🐾" : 
+        petType === "dog" ? "Đặt tui ở đây canh gác nhé! Gâu! 🐕" : 
+        petType === "bunny" ? "Thỏ ta hạ cánh an toàn! 🐰" : 
+        "Thả tui xuống ao nước đi! Cạp! 🦆"
+      );
+
+      if (actionTimeoutRef.current) clearTimeout(actionTimeoutRef.current);
+      actionTimeoutRef.current = setTimeout(() => {
+        setPetState("idle");
+      }, 3000);
+    };
+
+    window.addEventListener("pointermove", handleGlobalPointerMove);
+    window.addEventListener("pointerup", handleGlobalPointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handleGlobalPointerMove);
+      window.removeEventListener("pointerup", handleGlobalPointerUp);
+    };
+  }, [isDragging, pos, petType]);
 
   // Global user activity and wandering loop
   useEffect(() => {
@@ -897,13 +913,11 @@ export default function VirtualPet({ isDark, isGenerating }: VirtualPetProps) {
   return (
     <div 
       onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      className="fixed z-40 flex flex-col items-end select-none touch-none group"
+      className="fixed z-[9999] flex flex-col items-end select-none touch-none group"
       style={{
         left: `${pos.x}px`,
         top: `${pos.y}px`,
-        transition: isDragging ? "none" : "left 3.5s ease-in-out, top 3.5s ease-in-out",
+        transition: isWalking ? "left 3.5s ease-in-out, top 3.5s ease-in-out" : "none",
         cursor: isDragging ? "grabbing" : "grab",
       }}
     >
