@@ -291,12 +291,17 @@ def main():
             error_message = None
             
             try:
+                # Xây dựng cuộc hội thoại động cho quá trình sinh và tiếp nối
+                chat_history = list(context_messages)
+                
                 # Nếu chương có content partial sẵn, sử dụng nó thay vì viết lại từ đầu
                 if partial_content.strip():
                     print(f"[INFO] Phát hiện nội dung partial có sẵn ({count_vietnamese_words(partial_content)} từ). Đang khôi phục để viết tiếp...")
                     generated_text = partial_content
+                    chat_history.append({"role": "assistant", "content": partial_content})
                 else:
-                    generated_text = call_llm_with_retry(api_key, model_id, context_messages, max_tokens=4096)
+                    generated_text = call_llm_with_retry(api_key, model_id, chat_history, max_tokens=4096)
+                    chat_history.append({"role": "assistant", "content": generated_text})
                 
                 # Vòng lặp đếm từ và sinh tiếp (auto-continuation)
                 current_words = count_vietnamese_words(generated_text)
@@ -310,18 +315,18 @@ def main():
                     print(f"  [Auto-Continue] Số chữ hiện tại ({current_words}) dưới ngưỡng {target_min_words} chữ. Tiếp tục sinh...")
                     cont_instruction = (
                         f"Nội dung hiện tại mới chỉ có {current_words} chữ. "
-                        f"Hãy tiếp tục viết tiếp chương {i} ngay lập tức từ chỗ bạn vừa dừng để đạt tối thiểu {target_min_words} chữ. "
-                        f"Tuyệt đối không lặp lại nội dung đã viết ở trên."
+                        f"Hãy viết tiếp diễn biến tiếp theo của chương {i} ngay lập tức để đạt tối thiểu {target_min_words} chữ. "
+                        f"Bắt đầu trực tiếp bằng câu văn tiếp theo, tuyệt đối không lặp lại bất kỳ đoạn văn nào đã xuất hiện ở trên."
                     )
                     
-                    cont_messages = list(context_messages) + [
-                        {"role": "assistant", "content": generated_text},
-                        {"role": "user", "content": cont_instruction}
-                    ]
+                    # Thêm yêu cầu tiếp nối vào lịch sử hội thoại
+                    chat_history.append({"role": "user", "content": cont_instruction})
                     
-                    cont_text = call_llm_with_retry(api_key, model_id, cont_messages, max_tokens=3072)
+                    cont_text = call_llm_with_retry(api_key, model_id, chat_history, max_tokens=3072)
                     if cont_text:
                         generated_text += "\n\n" + cont_text
+                        # Cập nhật assistant turn trong lịch sử hội thoại để vòng lặp sau kế thừa đúng phần vừa sinh
+                        chat_history.append({"role": "assistant", "content": cont_text})
                         current_words = count_vietnamese_words(generated_text)
                         print(f"  [Auto-Continue Done] Lượt tiếp nối {cont_idx+1} hoàn thành. Tổng số từ: {current_words} từ.")
                     else:
