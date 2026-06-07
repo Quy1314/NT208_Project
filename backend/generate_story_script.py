@@ -136,15 +136,15 @@ def main():
         if not has_bible or not has_outline or args.force_regenerate_outline:
             print("[PROCESS] Đang sinh Story Bible mới cho bộ truyện...")
             bible_prompt = [
-                {"role": "system", "content": "Bạn là một nhà văn mạng chuyên nghiệp. Hãy viết một Story Bible (Thế giới quan và thiết lập nhân vật) cho dự án truyện tu tiên."},
-                {"role": "user", "content": f"Hãy viết Story Bible chi tiết cho truyện '{args.project_title}'. Bao gồm: các cảnh giới tu luyện, các thế lực lớn, các nhân vật chủ chốt (đặc biệt là Lý Thất Dạ) và mâu thuẫn chính."}
+                {"role": "system", "content": "Bạn là một nhà văn chuyên nghiệp viết bằng tiếng Việt tinh khiết. Tuyệt đối không sử dụng chữ Hán hay tiếng Trung Quốc."},
+                {"role": "user", "content": f"Hãy viết Story Bible chi tiết bằng tiếng Việt cho truyện '{args.project_title}'. Bao gồm: các cảnh giới tu luyện, các thế lực lớn, các nhân vật chủ chốt (đặc biệt là Lý Thất Dạ) và mâu thuẫn chính. Bắt buộc phản hồi bằng tiếng Việt 100%."}
             ]
             story_bible = call_llm_with_retry(api_key, model_id, bible_prompt)
             
             print("[PROCESS] Đang sinh Đề cương chương (Chapter Outline) mới...")
             outline_prompt = [
-                {"role": "system", "content": "Bạn là một nhà văn mạng chuyên nghiệp. Hãy lập đề cương chi tiết cho từng chương dựa vào Story Bible."},
-                {"role": "user", "content": f"Dựa vào Story Bible sau:\n{story_bible}\n\nHãy viết Đề cương chi tiết gồm {args.chapters} chương cho truyện '{args.project_title}'. Định dạng mỗi chương bắt buộc theo mẫu:\nChương X: [Tên chương]\nNội dung chính: [Tóm tắt chi tiết diễn biến]\n\nHãy viết đầy đủ {args.chapters} chương bằng tiếng Việt."}
+                {"role": "system", "content": "Bạn là một nhà văn chuyên nghiệp viết bằng tiếng Việt tinh khiết. Tuyệt đối không sử dụng chữ Hán hay tiếng Trung Quốc."},
+                {"role": "user", "content": f"Dựa vào Story Bible sau:\n{story_bible}\n\nHãy viết Đề cương chi tiết gồm {args.chapters} chương cho truyện '{args.project_title}' bằng tiếng Việt 100%. Định dạng mỗi chương bắt buộc theo mẫu:\nChương X: [Tên chương]\nNội dung chính: [Tóm tắt chi tiết diễn biến]\n\nHãy viết đầy đủ {args.chapters} chương hoàn toàn bằng tiếng Việt."}
             ]
             outline = call_llm_with_retry(api_key, model_id, outline_prompt)
             
@@ -261,15 +261,16 @@ def main():
             rolling_summary_val = str(project.rolling_summary or "")
             
             system_prompt = (
-                "Bạn là một nhà văn chuyên sáng tác truyện hư cấu tu tiên huyền ảo bằng tiếng Việt.\n"
-                "Tuyệt đối không sử dụng tiếng Anh hay bất kỳ ghi chú ngoài lề nào trong phản hồi, chỉ trả về nội dung chương truyện."
+                "Bạn là một nhà văn chuyên sáng tác truyện hư cấu tu tiên huyền ảo bằng tiếng Việt tinh khiết.\n"
+                "YÊU CẦU BẮT BUỘC: Bạn chỉ được viết bằng tiếng Việt. Tuyệt đối KHÔNG sử dụng tiếng Trung (chữ Hán), tiếng Anh hay bất kỳ ghi chú ngoài lề nào trong phản hồi, chỉ trả về nội dung chương truyện hoàn toàn bằng tiếng Việt."
             )
             
             instruction = (
                 f"Hãy viết Chương {i} cho bộ truyện tu tiên '{args.project_title}' với tiêu đề chương là '{chapter_title}'.\n"
                 f"Nội dung chương này: Lý Thất Dạ tiếp tục hành trình nghịch thiên của mình.\n"
-                f"Văn văn tu tiên kịch tính, hoành tráng, miêu tả chi tiết cảnh giới và chiêu thức chiến đấu.\n"
+                f"Văn phong tu tiên kịch tính, hoành tráng bằng tiếng Việt, miêu tả chi tiết cảnh giới và chiêu thức chiến đấu.\n"
                 f"YÊU CẦU ĐỘ DÀI: Viết chi tiết, mô tả sâu sắc tâm lý và hội thoại để chương dài ít nhất {target_min_words} chữ.\n"
+                f"LƯU Ý: Phải viết bằng tiếng Việt 100%, không sử dụng chữ Hán hay tiếng Trung Quốc."
             )
             
             context_messages = [
@@ -316,7 +317,8 @@ def main():
                     cont_instruction = (
                         f"Nội dung hiện tại mới chỉ có {current_words} chữ. "
                         f"Hãy viết tiếp diễn biến tiếp theo của chương {i} ngay lập tức để đạt tối thiểu {target_min_words} chữ. "
-                        f"Bắt đầu trực tiếp bằng câu văn tiếp theo, tuyệt đối không lặp lại bất kỳ đoạn văn nào đã xuất hiện ở trên."
+                        f"Bắt đầu trực tiếp bằng câu văn tiếp theo, tuyệt đối không lặp lại bất kỳ đoạn văn nào đã xuất hiện ở trên. "
+                        f"Bắt buộc viết hoàn toàn bằng tiếng Việt tinh khiết, không dùng tiếng Trung."
                     )
                     
                     # Thêm yêu cầu tiếp nối vào lịch sử hội thoại

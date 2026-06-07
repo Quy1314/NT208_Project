@@ -331,9 +331,8 @@ def generate_story_content(
             )
         else:
             system_prompt = (
-                "Bạn là nhà văn chuyên sáng tác truyện hư cấu. "
-                "Luôn trả lời bằng đúng ngôn ngữ được chọn: vietnamese. "
-                "Tuyệt đối không dùng tiếng Anh cho câu mô tả hoặc hội thoại."
+                "Bạn là một nhà văn chuyên sáng tác truyện hư cấu bằng tiếng Việt tinh khiết.\n"
+                "YÊU CẦU BẮT BUỘC: Bạn chỉ được viết bằng tiếng Việt. Tuyệt đối KHÔNG sử dụng tiếng Trung (chữ Hán), tiếng Anh hay bất kỳ ghi chú ngoài lề nào trong phản hồi, chỉ trả về nội dung truyện hoàn toàn bằng tiếng Việt."
             )
 
         messages = build_context_messages(
@@ -493,9 +492,8 @@ def generate_story_content_stream(
             )
         else:
             system_prompt = (
-                "Bạn là nhà văn chuyên sáng tác truyện hư cấu. "
-                "Luôn trả lời bằng đúng ngôn ngữ được chọn: vietnamese. "
-                "Tuyệt đối không dùng tiếng Anh cho câu mô tả hoặc hội thoại."
+                "Bạn là một nhà văn chuyên sáng tác truyện hư cấu bằng tiếng Việt tinh khiết.\n"
+                "YÊU CẦU BẮT BUỘC: Bạn chỉ được viết bằng tiếng Việt. Tuyệt đối KHÔNG sử dụng tiếng Trung (chữ Hán), tiếng Anh hay bất kỳ ghi chú ngoài lề nào trong phản hồi, chỉ trả về nội dung truyện hoàn toàn bằng tiếng Việt."
             )
 
         messages = build_context_messages(
