@@ -903,15 +903,42 @@ export default function DashboardPage() {
       return;
     }
 
-    const finalTitle = title.trim() ? title : prompt.trim().slice(0, 30) + (prompt.length > 30 ? "..." : "");
-
     if (isGenerating) return;
+
+    let finalTitle = title.trim();
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+
+    // Tự động gọi API tự đặt tên nếu chưa nhập tên project
+    if (!finalTitle) {
+      setIsGeneratingTitle(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/projects/generate-title`, {
+          method: "POST",
+          headers: buildProjectRequestHeaders(token),
+          body: JSON.stringify({ prompt: prompt.trim(), language }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.title) {
+            finalTitle = data.title;
+            setTitle(data.title);
+          }
+        }
+      } catch (e) {
+        console.error("Lỗi tự động đặt tên khi tạo project:", e);
+      } finally {
+        setIsGeneratingTitle(false);
+      }
+
+      if (!finalTitle) {
+        finalTitle = prompt.trim().slice(0, 30) + (prompt.length > 30 ? "..." : "");
+      }
+    }
 
     const isTextModel = !isAudioModelId(modelName) && !isImageModelId(modelName) && !isVideoModelId(modelName);
     const streamParam = isTextModel ? "?stream=true" : "";
 
     setIsGenerating(true);
-    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     const promptText = prompt;
     let finalPromptText = promptText;
     if (attachedFile && attachedFileContent) {
