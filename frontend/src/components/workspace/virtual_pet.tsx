@@ -913,7 +913,7 @@ export default function VirtualPet({ isDark, isGenerating }: VirtualPetProps) {
   return (
     <div 
       onPointerDown={handlePointerDown}
-      className="fixed z-[9999] flex flex-col items-end select-none touch-none group"
+      className="fixed z-[9999] w-16 h-16 select-none touch-none group"
       style={{
         left: `${pos.x}px`,
         top: `${pos.y}px`,
@@ -1038,7 +1038,9 @@ export default function VirtualPet({ isDark, isGenerating }: VirtualPetProps) {
         <div 
           onClick={resetIdleTimer}
           onPointerDown={(e) => e.stopPropagation()} 
-          className={`mb-3 max-w-[220px] px-3.5 py-2.5 rounded-2xl border text-xs font-semibold leading-relaxed shadow-lg backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 cursor-pointer ${
+          className={`absolute bottom-full mb-3 max-w-[220px] w-max min-w-[150px] px-3.5 py-2.5 rounded-2xl border text-xs font-semibold leading-relaxed shadow-lg backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-bottom-2 cursor-pointer z-[10001] ${
+            pos.x < window.innerWidth / 2 ? "left-0" : "right-0"
+          } ${
             isDark 
               ? "bg-slate-900/80 border-white/10 text-[#f3f4f6] shadow-black/40" 
               : "bg-white/95 border-slate-200 text-slate-800 shadow-slate-200/50"
@@ -1052,64 +1054,68 @@ export default function VirtualPet({ isDark, isGenerating }: VirtualPetProps) {
           </div>
           <p className="whitespace-pre-line text-[11px]">{bubbleText}</p>
           {/* Arrow */}
-          <div className={`absolute -bottom-1.5 right-6 w-3 h-3 rotate-45 border-r border-b ${
+          <div className={`absolute -bottom-1.5 w-3 h-3 rotate-45 border-r border-b ${
+            pos.x < window.innerWidth / 2 ? "left-6" : "right-6"
+          } ${
             isDark ? "bg-slate-900/80 border-white/10" : "bg-white border-slate-200"
           }`}></div>
         </div>
       )}
 
-      {/* Virtual Pet Core Widget */}
-      <div className="flex gap-2 items-center">
-        {/* Quick controls floating panel */}
-        {!showMenu && !isDragging && (
-          <div 
-            onPointerDown={(e) => e.stopPropagation()} 
-            className="flex flex-col gap-1.5 mb-2 opacity-30 group-hover:opacity-100 transition-opacity duration-300 mr-2 bg-slate-900/30 dark:bg-slate-950/20 p-1 rounded-xl backdrop-blur-sm"
+      {/* Quick controls floating panel */}
+      {!showMenu && !isDragging && (
+        <div 
+          onPointerDown={(e) => e.stopPropagation()} 
+          className={`absolute top-1/2 -translate-y-1/2 flex flex-col gap-1.5 opacity-30 group-hover:opacity-100 transition-opacity duration-300 bg-slate-900/30 dark:bg-slate-950/20 p-1 rounded-xl backdrop-blur-sm z-[10000] ${
+            pos.x < window.innerWidth / 2 ? "left-full ml-2" : "right-full mr-2"
+          }`}
+        >
+          <button 
+            onClick={(e) => { e.stopPropagation(); setShowMenu(true); resetIdleTimer(); }}
+            title="Menu trợ lý"
+            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+              isDark ? "bg-slate-900 border-white/10 text-white hover:bg-slate-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+            }`}
           >
-            <button 
-              onClick={(e) => { e.stopPropagation(); setShowMenu(true); resetIdleTimer(); }}
-              title="Menu trợ lý"
-              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                isDark ? "bg-slate-900 border-white/10 text-white hover:bg-slate-800" : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              <MessageSquare size={13} />
-            </button>
-          </div>
+            <MessageSquare size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* Pet Graphic Container */}
+      <div 
+        onClick={handlePetAction}
+        style={{
+          transform: `scaleX(${facing === "left" ? -1 : 1})`,
+          transition: "transform 0.3s ease",
+        }}
+        className="w-16 h-16 transform transition-transform duration-200 relative group cursor-pointer"
+      >
+        {renderPetSvg()}
+
+        {/* Sleep Indicator */}
+        {petState === "sleeping" && (
+          <span className="absolute -top-1 right-2 text-sm font-bold text-indigo-400 animate-bounce select-none font-mono">
+            Zzz...
+          </span>
         )}
 
-        <div 
-          onClick={handlePetAction}
-          style={{
-            transform: `scaleX(${facing === "left" ? -1 : 1})`,
-            transition: "transform 0.3s ease",
-          }}
-          className="transform transition-transform duration-200 relative group"
-        >
-          {renderPetSvg()}
-
-          {/* Sleep Indicator */}
-          {petState === "sleeping" && (
-            <span className="absolute -top-1 right-2 text-sm font-bold text-indigo-400 animate-bounce select-none font-mono">
-              Zzz...
-            </span>
-          )}
-
-          {/* Sparkle effects */}
-          {petState === "happy" && (
-            <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-              <Sparkles size={14} className="absolute -top-1 -left-1 text-yellow-400 animate-pulse" />
-              <Sparkles size={10} className="absolute -bottom-1 -right-1 text-emerald-400 animate-ping" />
-            </div>
-          )}
-        </div>
+        {/* Sparkle effects */}
+        {petState === "happy" && (
+          <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+            <Sparkles size={14} className="absolute -top-1 -left-1 text-yellow-400 animate-pulse" />
+            <Sparkles size={10} className="absolute -bottom-1 -right-1 text-emerald-400 animate-ping" />
+          </div>
+        )}
       </div>
 
       {/* Main Glassmorphism Customization & Play Menu */}
       {showMenu && (
         <div 
           onPointerDown={(e) => e.stopPropagation()} 
-          className={`mt-3 w-64 rounded-2xl border p-4 shadow-xl backdrop-blur-xl transition-all duration-300 animate-in fade-in zoom-in-95 ${
+          className={`absolute top-full mt-3 w-64 rounded-2xl border p-4 shadow-xl backdrop-blur-xl transition-all duration-300 animate-in fade-in zoom-in-95 z-[10002] ${
+            pos.x < window.innerWidth / 2 ? "left-0" : "right-0"
+          } ${
             isDark 
               ? "bg-slate-900/90 border-white/10 text-white shadow-black/60" 
               : "bg-white/95 border-slate-200 text-slate-800 shadow-slate-300/40"
@@ -1131,7 +1137,7 @@ export default function VirtualPet({ isDark, isGenerating }: VirtualPetProps) {
             </button>
           </div>
 
-          {/* Select Pet Type (Lưới chọn Pet: Hàng 1 (3 Pet), Hàng 2 (2 Pet)) */}
+          {/* Select Pet Type */}
           <div className="space-y-2 mb-4">
             <label className="block text-[11px] font-semibold text-slate-400">Chọn người bạn đồng hành:</label>
             <div className="grid grid-cols-3 gap-1.5">

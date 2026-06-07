@@ -44,6 +44,8 @@ export interface WorkspaceComposerDockProps {
   lengthOption: string;
   setLengthOption: (v: string) => void;
   queueLength: number;
+  onOptimizePrompt?: () => void;
+  isOptimizing?: boolean;
 }
 
 export default function WorkspaceComposerDock({
@@ -83,6 +85,8 @@ export default function WorkspaceComposerDock({
   lengthOption,
   setLengthOption,
   queueLength,
+  onOptimizePrompt,
+  isOptimizing = false,
 }: WorkspaceComposerDockProps) {
   if (!isVisible) return null;
 
@@ -359,6 +363,26 @@ export default function WorkspaceComposerDock({
             >
               <Mic size={14} /> {isRecording ? "Đang ghi âm..." : "Giọng nói"}
             </Button>
+            
+            {isTextModel && onOptimizePrompt && (
+              <Button 
+                type="button"
+                variant="ghost" 
+                size="sm" 
+                onClick={onOptimizePrompt}
+                disabled={isOptimizing || isBusy || (selectedProject ? !continuePrompt.trim() : !prompt.trim())}
+                className={`gap-1 cursor-pointer transition-all ${
+                  isDark ? "hover:text-white hover:bg-white/5 text-indigo-400" : "hover:text-indigo-700 hover:bg-slate-200 text-indigo-600"
+                }`}
+              >
+                {isOptimizing ? (
+                  <div className="w-3.5 h-3.5 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"></div>
+                ) : (
+                  <Sparkles size={14} className="text-indigo-500" />
+                )}
+                {isOptimizing ? "Đang tối ưu..." : "Tối ưu prompt"}
+              </Button>
+            )}
 
             <Button
               data-testid="workspace-submit-button"

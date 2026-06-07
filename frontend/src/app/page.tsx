@@ -246,6 +246,7 @@ export default function DashboardPage() {
 
   const [videoMessages, setVideoMessages] = useState<VideoChatMessage[]>([]);
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  const [isOptimizingPrompt, setIsOptimizingPrompt] = useState(false);
 
   // File attachments and voice recording states
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -855,6 +856,44 @@ export default function DashboardPage() {
       setTitle(fallback);
     } finally {
       setIsGeneratingTitle(false);
+    }
+  };
+
+  const handleOptimizePrompt = async () => {
+    const rawPrompt = selectedProject ? continuePrompt.trim() : prompt.trim();
+    if (!rawPrompt) {
+      alert("Vui lòng nhập Prompt trước khi tối ưu.");
+      return;
+    }
+    setIsOptimizingPrompt(true);
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/projects/optimize-prompt`, {
+        method: "POST",
+        headers: buildProjectRequestHeaders(token),
+        body: JSON.stringify({ prompt: rawPrompt, language }),
+      });
+      if (res.status === 401) {
+        handleLogout();
+        return;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        if (data.optimized_prompt) {
+          if (selectedProject) {
+            setContinuePrompt(data.optimized_prompt);
+          } else {
+            setPrompt(data.optimized_prompt);
+          }
+        }
+      } else {
+        alert("Không thể tối ưu prompt. Vui lòng thử lại sau.");
+      }
+    } catch (e) {
+      console.error("Lỗi tối ưu prompt:", e);
+      alert("Không kết nối được server để tối ưu prompt.");
+    } finally {
+      setIsOptimizingPrompt(false);
     }
   };
 
@@ -1649,6 +1688,8 @@ export default function DashboardPage() {
             lengthOption={lengthOption}
             setLengthOption={setLengthOption}
             queueLength={queueLength}
+            onOptimizePrompt={handleOptimizePrompt}
+            isOptimizing={isOptimizingPrompt}
           />
 
           <VirtualPet

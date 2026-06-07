@@ -296,3 +296,12 @@ class PromptTemplateResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PromptOptimizeReq(BaseModel):
+    prompt: str
+    language: Literal["vietnamese", "english"] = "vietnamese"
+
+
+class PromptOptimizeResp(BaseModel):
+    optimized_prompt: str

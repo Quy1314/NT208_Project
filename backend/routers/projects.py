@@ -1414,6 +1414,74 @@ def generate_title(
         return {"title": fallback}
 
 
+@router.post("/optimize-prompt", response_model=models.PromptOptimizeResp)
+def optimize_prompt(
+    data: models.PromptOptimizeReq,
+    current_user: models.User = Depends(get_current_user),
+    x_hf_api_key: str | None = Header(None, alias="X-HF-Api-Key"),
+):
+    _ = current_user
+    load_dotenv(override=True)
+    env_key = os.getenv("hf_key_read")
+    api_key = (x_hf_api_key or "").strip() or (env_key or "").strip()
+
+    if not api_key:
+        return {"optimized_prompt": data.prompt}
+
+    try:
+        client = InferenceClient(token=api_key)
+        model_id = "Qwen/Qwen2.5-72B-Instruct"
+        
+        if data.language == "english":
+            system_instruction = (
+                "You are an expert prompt engineer and a professional fantasy story writer.\n"
+                "Your task is to take a raw, brief story prompt or idea from the user and expand it into a highly detailed, descriptive, and structured prompt optimized for generating a rich fantasy/xianxia story.\n"
+                "Strictly follow these rules:\n"
+                "1. Output the optimized prompt in ENGLISH.\n"
+                "2. The optimized prompt should detail: Setting/World Building, Main Character, Cheat/Unique ability, Main Conflict, and Writing Style (e.g. epic, mysterious, dramatic).\n"
+                "3. Respond ONLY with the optimized prompt content. Do NOT include conversational filler, greetings, markdown headings like '# Optimized Prompt', or quotes around the prompt."
+            )
+        else:
+            system_instruction = (
+                "Bạn là một chuyên gia kỹ sư prompt (Prompt Engineer) và nhà văn chuyên viết truyện tiên hiệp, huyền ảo.\n"
+                "Nhiệm vụ của bạn là nhận vào một ý tưởng hoặc prompt thô từ người dùng và mở rộng, tối ưu hóa nó thành một prompt chi tiết, phong phú, giàu tính miêu tả bằng tiếng Việt 100% để tạo ra một câu chuyện tu tiên huyền ảo, kịch tính.\n"
+                "Hãy tuân thủ nghiêm ngặt các quy tắc sau:\n"
+                "1. Viết prompt tối ưu hóa hoàn toàn bằng TIẾNG VIỆT tinh khiết. TUYỆT ĐỐI KHÔNG sử dụng chữ Hán (chữ Trung Quốc), tiếng Anh hay bất kỳ ngôn ngữ nào khác.\n"
+                "2. Prompt tối ưu hóa cần bao gồm các chi tiết sinh động về: Bối cảnh huyền ảo, Thiết lập nhân vật chính (uy nghiêm, sâu sắc hoặc nghịch thiên), Cơ duyên/Bàn tay vàng, Mâu thuẫn/Xung đột chính và Văn phong kỳ ảo hoành tráng.\n"
+                "3. Đầu ra CHỈ chứa duy nhất nội dung prompt đã được tối ưu hóa. KHÔNG thêm lời chào, lời dẫn, lời giải thích hay bất cứ văn bản trò chuyện nào khác. KHÔNG đặt trong dấu ngoặc kép."
+            )
+        
+        messages = [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": f"Ý tưởng thô: {data.prompt}"}
+        ]
+        
+        response = client.chat_completion(
+            model=model_id,
+            messages=messages,
+            max_tokens=1024,
+            temperature=0.7
+        )
+        
+        optimized = ""
+        if response.choices:
+            optimized = response.choices[0].message.content or ""
+        
+        optimized = optimized.strip()
+        if optimized.startswith('"') and optimized.endswith('"'):
+            optimized = optimized[1:-1].strip()
+        elif optimized.startswith('“') and optimized.endswith('”'):
+            optimized = optimized[1:-1].strip()
+            
+        if not optimized:
+            raise ValueError("Empty response from AI")
+            
+        return {"optimized_prompt": optimized}
+    except Exception as e:
+        print(f"[WARN] Failed to optimize prompt via AI: {e}")
+        return {"optimized_prompt": data.prompt}
+
+
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(project_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """
