@@ -1,3 +1,7 @@
+import warnings
+# Suppress pydub runtime warnings about ffmpeg/avconv in serverless environment
+warnings.filterwarnings("ignore", category=RuntimeWarning, message="Couldn't find ffmpeg or avconv")
+
 import traceback
 import sys
 import os
