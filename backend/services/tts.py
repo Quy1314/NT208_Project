@@ -11,6 +11,7 @@ VIENEU_SERVICE_URL = (
 )
 
 DEFAULT_VOICE = "Bình An"
+DEFAULT_TIMEOUT = 180.0
 
 
 def generate_tts_audio(
@@ -19,7 +20,7 @@ def generate_tts_audio(
     voice: str = DEFAULT_VOICE,
     speed: int = 0,
     audio_format: str = "mp3",
-    timeout_seconds: float = 120.0,
+    timeout_seconds: float = DEFAULT_TIMEOUT,
     ref_audio_url: str | None = None,
 ) -> Tuple[bytes, str]:
     """
@@ -29,6 +30,12 @@ def generate_tts_audio(
     text = (text or "").strip()
     if not text:
         return b"", "wav"
+
+    # Pre-warm HF Space (đánh thức nếu đang sleep)
+    try:
+        requests.get(f"{VIENEU_SERVICE_URL}/health", timeout=10)
+    except Exception:
+        pass
 
     params = {"text": text, "voice": voice}
     if ref_audio_url:

@@ -40,6 +40,6 @@ def generate_audio_from_text(
         text=script,
         voice=voice,
         ref_audio_url=ref_audio_url,
-        timeout_seconds=120.0,
+        timeout_seconds=180.0,
     )
     return audio_bytes

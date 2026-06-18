@@ -34,7 +34,7 @@ async def process_audio_job_async(ctx, job_id_str: str, fpt_api_key: str | None 
         audio_bytes, ext = generate_tts_audio(
             text=script,
             voice=DEFAULT_VOICE,
-            timeout_seconds=120.0,
+            timeout_seconds=180.0,
         )
         if not audio_bytes:
             raise RuntimeError("TTS returned empty audio.")
