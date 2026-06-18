@@ -38,6 +38,8 @@ import {
   Sun,
   KeyRound,
   FileDown,
+  Mic,
+  Radio,
 } from "lucide-react";
 
 interface VideoChatMessage {
@@ -256,6 +258,70 @@ export default function DashboardPage() {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const continueQueueRef = useRef<string[]>([]);
   const [queueLength, setQueueLength] = useState(0);
+
+  // Voice cloning states
+  const [selectedVoice, setSelectedVoice] = useState("Bình An");
+  const [userVoices, setUserVoices] = useState<{ id: string; name: string; sample_url: string }[]>([]);
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const voiceMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
+
+  const fetchUserVoices = useCallback(async () => {
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/audio/voices`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const voices = await res.json();
+        setUserVoices(voices);
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
+
+  const startVoiceRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceChunksRef.current = [];
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      voiceMediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) voiceChunksRef.current.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(voiceChunksRef.current, { type: "audio/webm" });
+        const formData = new FormData();
+        formData.append("name", `Giọng của tôi`);
+        formData.append("sample", blob, "voice_sample.webm");
+        const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/audio/voices`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: formData,
+          });
+          if (res.ok) {
+            const voice = await res.json();
+            setUserVoices(prev => [...prev, voice]);
+            setSelectedVoice(voice.name);
+            alert("Đã lưu giọng nói thành công!");
+          } else {
+            alert("Lỗi lưu giọng nói.");
+          }
+        } catch (e) { alert("Lỗi kết nối."); }
+        stream.getTracks().forEach(t => t.stop());
+        setShowVoiceRecorder(false);
+      };
+      mediaRecorder.start();
+      setIsRecordingVoice(true);
+      setTimeout(() => { if (mediaRecorder.state === "recording") mediaRecorder.stop(); setIsRecordingVoice(false); }, 6000);
+    } catch (e) {
+      alert("Không thể truy cập microphone. Vui lòng cấp quyền.");
+    }
+  };
+
+  // Load voices on mount
+  useEffect(() => { fetchUserVoices(); }, [fetchUserVoices]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -948,7 +1014,7 @@ export default function DashboardPage() {
       const res = await fetch(`${API_BASE_URL}/api/projects/${streamParam}`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify(toProjectCreateApiPayload({ title: finalTitle, prompt: finalPromptText, language, modelName: modelName.trim(), minWords, maxWords })),
+        body: JSON.stringify(toProjectCreateApiPayload({ title: finalTitle, prompt: finalPromptText, language, modelName: modelName.trim(), minWords, maxWords, voice: isAudioModel ? selectedVoice : undefined })),
       });
       if (res.ok) {
         if (isTextModel) {
@@ -1101,7 +1167,7 @@ export default function DashboardPage() {
       const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/continue${streamParam}`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify(toProjectContinueApiPayload({ prompt: finalPromptText, language, modelName: modelName.trim(), minWords, maxWords })),
+        body: JSON.stringify(toProjectContinueApiPayload({ prompt: finalPromptText, language, modelName: modelName.trim(), minWords, maxWords, voice: isAudioModel ? selectedVoice : undefined })),
       });
       if (res.ok) {
         if (isTextModel) {
@@ -1723,6 +1789,80 @@ export default function DashboardPage() {
             isDark={isDark}
             isGenerating={isGenerating || isContinuing || isGeneratingVideo}
           />
+
+          {/* ─── Voice Selector (audio model) ─── */}
+          {isAudioModel && (
+            <div className={`fixed bottom-28 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2 rounded-xl border shadow-lg ${isDark ? "bg-slate-900/95 border-white/10" : "bg-white/95 border-slate-200"}`}>
+              <Radio size={14} className="text-indigo-500" />
+              <select
+                value={selectedVoice}
+                onChange={(e) => setSelectedVoice(e.target.value)}
+                className={`text-xs font-semibold px-2 py-1 rounded border focus:outline-none ${isDark ? "bg-slate-800 border-white/10 text-white" : "bg-slate-50 border-slate-200 text-slate-700"}`}
+              >
+                <optgroup label="Giọng có sẵn">
+                  {["Bình An", "Ngọc Linh", "Trúc Ly", "Mỹ Duyên", "Xuân Vĩnh", "Thái Sơn", "Gia Bảo", "Đức Trí", "Trọng Hữu", "Ngọc Lan"].map(v => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </optgroup>
+                {userVoices.length > 0 && (
+                  <optgroup label="Giọng của bạn">
+                    {userVoices.map(v => (
+                      <option key={v.id} value={v.name}>{v.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowVoiceRecorder(true)}
+                className={`text-xs gap-1 cursor-pointer ${isDark ? "text-indigo-400 hover:text-indigo-300" : "text-indigo-600 hover:text-indigo-500"}`}
+              >
+                <Mic size={12} /> Thu giọng
+              </Button>
+            </div>
+          )}
+
+          {/* ─── Voice Recorder Modal ─── */}
+          {showVoiceRecorder && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowVoiceRecorder(false)}>
+              <div
+                className={`p-6 rounded-2xl shadow-xl max-w-sm w-full ${isDark ? "bg-slate-900 border border-white/10" : "bg-white"}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className={`text-lg font-bold mb-2 ${isDark ? "text-white" : "text-slate-800"}`}>Thu âm giọng nói</h3>
+                <p className={`text-xs mb-4 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  Đọc to vài câu trong 5 giây để AI clone giọng của bạn.
+                </p>
+                <div className="flex justify-center gap-3">
+                  {isRecordingVoice ? (
+                    <div className="text-center">
+                      <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-2 animate-pulse">
+                        <Mic size={28} className="text-red-500" />
+                      </div>
+                      <p className={`text-xs ${isDark ? "text-red-400" : "text-red-600"}`}>Đang thu... (5s)</p>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={startVoiceRecording}
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white gap-2 cursor-pointer"
+                    >
+                      <Mic size={16} /> Bắt đầu thu âm
+                    </Button>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowVoiceRecorder(false)}
+                  className={`mt-4 w-full text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}
+                >
+                  Đóng
+                </Button>
+              </div>
+            </div>
+          )}
 
           <WorkspaceModals
             currentPasswordState={{

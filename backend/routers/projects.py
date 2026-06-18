@@ -31,6 +31,7 @@ from story_engine.context_pack import build_story_context_pack, build_context_me
 # Tạo Router cho group API liên quan đến Dự án, có prefix là /api/projects
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
 FPT_TTS_MODEL = "fpt-ai-tts-v5"
+VIENEU_TTS_MODEL = "vieneu-tts-v3"
 # Text-to-image qua Hugging Face Inference (router); khớp dropdown frontend.
 HF_IMAGE_MODELS = frozenset(
     {
@@ -826,7 +827,6 @@ def create_project(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
     x_hf_api_key: str | None = Header(None, alias="X-HF-Api-Key"),
-    x_fpt_api_key: str | None = Header(None, alias="X-FPT-Api-Key"),
 ):
     """
     API Tạo Project mới và sinh nội dung bằng Hugging Face Model (FrostAura).
@@ -834,7 +834,7 @@ def create_project(
     Optional: header X-HF-Api-Key — key HF tạm của user (không lưu server).
     """
     # Kiểm tra loại model: audio, image hoặc text LLM.
-    audio_models = [FPT_TTS_MODEL]
+    audio_models = [VIENEU_TTS_MODEL, FPT_TTS_MODEL]
     is_audio_model = data.model_name and data.model_name in audio_models
     is_image_model = bool(data.model_name and data.model_name in HF_IMAGE_MODELS)
 
@@ -984,7 +984,7 @@ def create_project(
                 audio_bytes = generate_audio_from_text(
                     generated_content,
                     data.language,
-                    fpt_api_key=x_fpt_api_key,
+                    voice=data.voice or "Bình An",
                 )
                 stored_bytes, ext = to_mp3_if_possible(audio_bytes)
                 audio_filename = f"audio_{new_project.id}_{int(time.time() * 1000)}.{ext}"
@@ -1054,7 +1054,6 @@ def continue_project(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
     x_hf_api_key: str | None = Header(None, alias="X-HF-Api-Key"),
-    x_fpt_api_key: str | None = Header(None, alias="X-FPT-Api-Key"),
 ):
     pid = _project_uuid(project_id)
     project = db.query(models.Project).filter(models.Project.id == pid).first()
@@ -1063,7 +1062,7 @@ def continue_project(
     if getattr(project, "user_id", None) != getattr(current_user, "id", None):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập Project này.")
 
-    audio_models = [FPT_TTS_MODEL]
+    audio_models = [VIENEU_TTS_MODEL, FPT_TTS_MODEL]
     is_audio_model = data.model_name and data.model_name in audio_models
     is_image_model = bool(data.model_name and data.model_name in HF_IMAGE_MODELS)
 
@@ -1089,7 +1088,7 @@ def continue_project(
             audio_bytes = generate_audio_from_text(
                 new_chunk_text,
                 data.language,
-                fpt_api_key=x_fpt_api_key,
+                voice=data.voice or "Bình An",
             )
             stored_bytes, ext = to_mp3_if_possible(audio_bytes)
             audio_filename = f"audio_{pid}_{int(time.time() * 1000)}.{ext}"

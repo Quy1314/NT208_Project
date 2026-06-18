@@ -137,6 +137,17 @@ class AudioJob(Base):
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 
+class VoiceProfile(Base):
+    __tablename__ = "voice_profiles"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, server_default=func.gen_random_uuid())
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    sample_url = Column(Text, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
 class PromptTemplate(Base):
     __tablename__ = "prompt_templates"
 
@@ -194,6 +205,7 @@ class ProjectCreateReq(BaseModel):
     model_name: str | None = None  # Hugging Face Inference model id (optional)
     min_words: int | None = 1000
     max_words: int | None = 2000
+    voice: str | None = None
 
 class ProjectContinueReq(BaseModel):
     prompt: str
@@ -201,6 +213,7 @@ class ProjectContinueReq(BaseModel):
     model_name: str | None = None
     min_words: int | None = 1000
     max_words: int | None = 2000
+    voice: str | None = None
 
 class TitleGenerateReq(BaseModel):
     prompt: str
@@ -293,6 +306,16 @@ class PromptTemplateResponse(BaseModel):
     is_public: bool
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class VoiceProfileResp(BaseModel):
+    id: str
+    name: str
+    sample_url: str
+    is_active: bool
 
     class Config:
         from_attributes = True

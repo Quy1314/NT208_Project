@@ -1,127 +1,57 @@
+import base64
 import os
 import time
-from io import BytesIO
-from typing import Iterable, Tuple
+from typing import Tuple
 
+import httpx
 import requests
-from pydub import AudioSegment
 
-FPT_TTS_URL = "https://api.fpt.ai/hmi/tts/v5"
+VIENEU_SERVICE_URL = (
+    os.getenv("VIENEU_TTS_SERVICE_URL", "https://kiwi-1106-vienue-tts.hf.space").strip().rstrip("/")
+)
 
-
-def _resolve_api_key(api_key: str | None) -> str:
-    resolved = (api_key or "").strip() or (os.getenv("FPT_API_KEY") or "").strip()
-    if not resolved:
-        raise RuntimeError("Thiếu FPT API key. Hãy gửi header X-FPT-Api-Key hoặc cấu hình FPT_API_KEY.")
-    return resolved
-
-
-def _split_text_chunks(text: str, max_len: int = 1200) -> list[str]:
-    cleaned = (text or "").strip()
-    if not cleaned:
-        return [""]
-    if len(cleaned) <= max_len:
-        return [cleaned]
-
-    chunks: list[str] = []
-    current = ""
-    for line in cleaned.splitlines():
-        candidate = f"{current}\n{line}".strip() if current else line
-        if len(candidate) <= max_len:
-            current = candidate
-            continue
-        if current:
-            chunks.append(current)
-        current = line
-    if current:
-        chunks.append(current)
-    return chunks
-
-
-def _request_tts_async_url(text: str, api_key: str, voice: str, speed: int, audio_format: str) -> str:
-    headers = {
-        "api-key": api_key,
-        "voice": voice,
-        "speed": str(speed),
-        "format": audio_format,
-    }
-    res = requests.post(FPT_TTS_URL, data=text.encode("utf-8"), headers=headers, timeout=60)
-    res.raise_for_status()
-    payload = res.json()
-    async_url = payload.get("async")
-    if not async_url:
-        raise RuntimeError(f"FPT TTS response không hợp lệ: {payload}")
-    return async_url
-
-
-def _poll_audio(async_url: str, timeout_seconds: float = 60.0) -> bytes:
-    start = time.monotonic()
-    delay = 0.8
-    max_delay = 5.0
-
-    while True:
-        elapsed = time.monotonic() - start
-        if elapsed > timeout_seconds:
-            raise TimeoutError("FPT TTS timeout: audio chưa sẵn sàng trong 60 giây.")
-
-        try:
-            res = requests.get(async_url, timeout=30)
-            if res.status_code == 200:
-                return res.content
-            if res.status_code not in (202, 404):
-                raise RuntimeError(f"FPT async URL trả status {res.status_code}.")
-        except requests.RequestException as exc:
-            # Retry lỗi mạng tạm thời cho đến khi timeout.
-            if (time.monotonic() - start) > timeout_seconds:
-                raise RuntimeError(f"Lỗi kết nối khi poll FPT audio: {str(exc)}") from exc
-
-        time.sleep(delay)
-        delay = min(max_delay, delay * 1.7)
-
-
-def _merge_audio_chunks(chunks: Iterable[bytes]) -> bytes:
-    merged: AudioSegment | None = None
-    for chunk in chunks:
-        segment = AudioSegment.from_file(BytesIO(chunk))
-        merged = segment if merged is None else merged + segment
-
-    if merged is None:
-        return b""
-
-    out = BytesIO()
-    merged.export(out, format="mp3", bitrate="128k")
-    return out.getvalue()
+DEFAULT_VOICE = "Bình An"
 
 
 def generate_tts_audio(
     text: str,
-    api_key: str | None,
-    voice: str = "leminh",
+    api_key: str | None = None,
+    voice: str = DEFAULT_VOICE,
     speed: int = 0,
     audio_format: str = "mp3",
-    timeout_seconds: float = 60.0,
+    timeout_seconds: float = 120.0,
+    ref_audio_url: str | None = None,
 ) -> Tuple[bytes, str]:
     """
-    Full async TTS flow:
-    1) submit text -> async url
-    2) poll with exponential backoff
-    3) support long text by chunking then merging
+    Gọi VieNeu-TTS service qua HTTP.
+    api_key, speed, audio_format giữ lại để tương thích interface cũ nhưng không dùng.
     """
-    resolved_api_key = _resolve_api_key(api_key)
-    chunks = _split_text_chunks(text)
-    audio_parts: list[bytes] = []
+    text = (text or "").strip()
+    if not text:
+        return b"", "wav"
 
-    for chunk in chunks:
-        async_url = _request_tts_async_url(
-            text=chunk,
-            api_key=resolved_api_key,
-            voice=voice,
-            speed=speed,
-            audio_format=audio_format,
+    params = {"text": text, "voice": voice}
+    if ref_audio_url:
+        params["ref_audio_url"] = ref_audio_url
+
+    try:
+        resp = requests.post(
+            f"{VIENEU_SERVICE_URL}/generate",
+            params=params,
+            timeout=timeout_seconds,
         )
-        audio_parts.append(_poll_audio(async_url, timeout_seconds=timeout_seconds))
-
-    if len(audio_parts) == 1:
-        return audio_parts[0], "mp3"
-    return _merge_audio_chunks(audio_parts), "mp3"
-
+        resp.raise_for_status()
+        payload = resp.json()
+        audio_b64 = payload.get("audio_b64", "")
+        if not audio_b64:
+            raise RuntimeError("VieNeu service không trả về audio_b64")
+        audio_bytes = base64.b64decode(audio_b64)
+        ext = payload.get("format", "wav")
+        return audio_bytes, ext
+    except requests.exceptions.Timeout:
+        raise TimeoutError(f"VieNeu TTS timeout sau {timeout_seconds}s")
+    except requests.exceptions.ConnectionError as e:
+        raise RuntimeError(f"Không thể kết nối VieNeu TTS service: {VIENEU_SERVICE_URL}") from e
+    except requests.exceptions.HTTPError as e:
+        detail = e.response.text if e.response is not None else str(e)
+        raise RuntimeError(f"VieNeu TTS service lỗi HTTP {e.response.status_code if e.response else '?'}: {detail[:200]}")

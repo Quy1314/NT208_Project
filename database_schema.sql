@@ -175,6 +175,15 @@ CREATE TABLE IF NOT EXISTS audio_jobs (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS voice_profiles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(120) NOT NULL,
+    sample_url TEXT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS project_members (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -372,6 +381,8 @@ CREATE INDEX IF NOT EXISTS idx_project_team_tokens_token ON project_team_tokens(
 CREATE INDEX IF NOT EXISTS idx_audio_files_project_id ON audio_files(project_id);
 CREATE INDEX IF NOT EXISTS idx_audio_jobs_user_id ON audio_jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audio_jobs_status_created_at ON audio_jobs(status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_voice_profiles_user_id ON voice_profiles(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_teams_owner_id ON teams(owner_id);
 CREATE INDEX IF NOT EXISTS idx_teams_owner_active ON teams(owner_id, created_at DESC) WHERE deleted_at IS NULL;

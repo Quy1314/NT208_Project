@@ -1,4 +1,4 @@
-/** Hugging Face/FPT model ids configured in-app (khớp backend routers/projects.py). */
+/** Hugging Face/VieNeu model ids configured in-app (khớp backend routers/projects.py). */
 
 export const hfTextModelOptions: string[] = [
   "Qwen/Qwen2.5-72B-Instruct",
@@ -13,9 +13,9 @@ export const hfImageModelOptions: string[] = [
   "stabilityai/stable-diffusion-xl-base-1.0",
 ];
 
-/** Text-to-speech qua FPT AI; backend nhận model id này tại routers/projects.py. */
+/** Text-to-speech qua VieNeu-TTS v3 Turbo (voice cloning, local model). */
 export const audioModelOptions: string[] = [
-  "fpt-ai-tts-v5",
+  "vieneu-tts-v3",
 ];
 
 export const videoModelOptions: string[] = [
@@ -26,7 +26,7 @@ export const videoModelOptions: string[] = [
 export const hfModelGroups: { label: string; models: string[] }[] = [
   { label: "Văn bản (LLM)", models: hfTextModelOptions },
   { label: "Ảnh (Hugging Face Inference)", models: hfImageModelOptions },
-  { label: "Audio (FPT AI TTS)", models: audioModelOptions },
+  { label: "Audio (VieNeu TTS)", models: audioModelOptions },
   { label: "Video", models: videoModelOptions },
 ];
 

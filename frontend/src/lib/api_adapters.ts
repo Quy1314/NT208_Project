@@ -5,6 +5,7 @@ export type ProjectCreateRequest = {
   modelName: string;
   minWords?: number;
   maxWords?: number;
+  voice?: string;
 };
 
 export type ProjectContinueRequest = {
@@ -13,6 +14,7 @@ export type ProjectContinueRequest = {
   modelName: string;
   minWords?: number;
   maxWords?: number;
+  voice?: string;
 };
 
 export type ChangePasswordRequest = {
@@ -38,7 +40,7 @@ export type UserProfile = {
 };
 
 export function toProjectCreateApiPayload(request: ProjectCreateRequest) {
-  return {
+  const payload: Record<string, unknown> = {
     title: request.title,
     prompt: request.prompt,
     language: request.language,
@@ -46,16 +48,20 @@ export function toProjectCreateApiPayload(request: ProjectCreateRequest) {
     min_words: request.minWords,
     max_words: request.maxWords,
   };
+  if (request.voice) payload.voice = request.voice;
+  return payload;
 }
 
 export function toProjectContinueApiPayload(request: ProjectContinueRequest) {
-  return {
+  const payload: Record<string, unknown> = {
     prompt: request.prompt,
     language: request.language,
     model_name: request.modelName,
     min_words: request.minWords,
     max_words: request.maxWords,
   };
+  if (request.voice) payload.voice = request.voice;
+  return payload;
 }
 
 
