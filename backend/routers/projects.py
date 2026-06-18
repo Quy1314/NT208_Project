@@ -21,6 +21,7 @@ from PIL import Image as PILImage
 import models
 from database import get_db
 from services.audio_pipeline import generate_audio_from_text, get_audio_upload_dir, to_mp3_if_possible
+from services.storage import get_signed_url
 from auth import get_current_user
 
 from image_pipeline.pipeline import canon_engine_enabled, run_canon_image_pipeline
@@ -32,6 +33,27 @@ from story_engine.context_pack import build_story_context_pack, build_context_me
 router = APIRouter(prefix="/api/projects", tags=["Projects"])
 FPT_TTS_MODEL = "fpt-ai-tts-v5"
 VIENEU_TTS_MODEL = "vieneu-tts-v3"
+
+PRESET_VOICES = frozenset({"Bình An", "Ngọc Linh", "Trúc Ly", "Mỹ Duyên",
+                            "Xuân Vĩnh", "Thái Sơn", "Gia Bảo", "Đức Trí",
+                            "Trọng Hữu", "Ngọc Lan"})
+
+
+def _resolve_voice(db: Session, user_id: UUID, voice_name: str) -> tuple[str, str | None]:
+    if voice_name in PRESET_VOICES:
+        return voice_name, None
+    profile = (
+        db.query(models.VoiceProfile)
+        .filter(models.VoiceProfile.user_id == user_id, models.VoiceProfile.name == voice_name)
+        .first()
+    )
+    if profile:
+        ref = profile.sample_url
+        if ref and ref.startswith("private://"):
+            bucket, fname = ref[10:].split("/", 1)
+            ref = get_signed_url(bucket, fname) or ref
+        return "Bình An", ref
+    return "Bình An", None
 # Text-to-image qua Hugging Face Inference (router); khớp dropdown frontend.
 HF_IMAGE_MODELS = frozenset(
     {
@@ -981,10 +1003,12 @@ def create_project(
         if is_audio_model:
             # Không để lỗi TTS làm fail toàn bộ thao tác tạo project.
             try:
+                voice_name, ref_audio_url = _resolve_voice(db, current_user.id, data.voice or "Bình An")
                 audio_bytes = generate_audio_from_text(
                     generated_content,
                     data.language,
-                    voice=data.voice or "Bình An",
+                    voice=voice_name,
+                    ref_audio_url=ref_audio_url,
                 )
                 stored_bytes, ext = to_mp3_if_possible(audio_bytes)
                 audio_filename = f"audio_{new_project.id}_{int(time.time() * 1000)}.{ext}"
@@ -1085,10 +1109,12 @@ def continue_project(
         new_chunk_text = _extract_tts_text(data.prompt)
         new_chunk = new_chunk_text
         try:
+            voice_name, ref_audio_url = _resolve_voice(db, current_user.id, data.voice or "Bình An")
             audio_bytes = generate_audio_from_text(
                 new_chunk_text,
                 data.language,
-                voice=data.voice or "Bình An",
+                voice=voice_name,
+                ref_audio_url=ref_audio_url,
             )
             stored_bytes, ext = to_mp3_if_possible(audio_bytes)
             audio_filename = f"audio_{pid}_{int(time.time() * 1000)}.{ext}"

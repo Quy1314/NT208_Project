@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Mic, Paperclip, Sparkles, X } from "lucide-react";
+import { Mic, Paperclip, Radio, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -46,6 +46,11 @@ export interface WorkspaceComposerDockProps {
   queueLength: number;
   onOptimizePrompt?: () => void;
   isOptimizing?: boolean;
+  // voice cloning
+  selectedVoice: string;
+  setSelectedVoice: (v: string) => void;
+  userVoices: { id: string; name: string }[];
+  onOpenVoiceRecorder: () => void;
 }
 
 export default function WorkspaceComposerDock({
@@ -87,6 +92,10 @@ export default function WorkspaceComposerDock({
   queueLength,
   onOptimizePrompt,
   isOptimizing = false,
+  selectedVoice,
+  setSelectedVoice,
+  userVoices,
+  onOpenVoiceRecorder,
 }: WorkspaceComposerDockProps) {
   if (!isVisible) return null;
 
@@ -163,6 +172,41 @@ export default function WorkspaceComposerDock({
             isDark ? "text-[#f3f4f6] placeholder-[#6b7280]" : "text-slate-900 placeholder-slate-400"
           }`}
         />
+
+        {isAudioModel && (
+          <div className="px-3 flex items-center gap-2">
+            <Radio size={14} className="text-indigo-500 shrink-0" />
+            <select
+              value={selectedVoice}
+              onChange={(e) => setSelectedVoice(e.target.value)}
+              className={`text-xs font-semibold px-2 py-1 rounded border focus:outline-none flex-1 ${
+                isDark ? "bg-slate-950/60 border-white/10 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-700"
+              }`}
+            >
+              <optgroup label="Giọng có sẵn">
+                {["Bình An", "Ngọc Linh", "Trúc Ly", "Mỹ Duyên", "Xuân Vĩnh", "Thái Sơn", "Gia Bảo", "Đức Trí", "Trọng Hữu", "Ngọc Lan"].map(v => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </optgroup>
+              {userVoices.length > 0 && (
+                <optgroup label="Giọng của bạn">
+                  {userVoices.map(v => (
+                    <option key={v.id} value={v.name}>{v.name}</option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={onOpenVoiceRecorder}
+              className={`text-xs gap-1 shrink-0 cursor-pointer ${isDark ? "text-indigo-400 hover:text-indigo-300" : "text-indigo-600 hover:text-indigo-500"}`}
+            >
+              <Mic size={12} /> Thu giọng
+            </Button>
+          </div>
+        )}
 
         {attachedFile && (
           <div className="px-3 pb-2 flex items-center gap-2">

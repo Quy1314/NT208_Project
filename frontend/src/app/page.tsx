@@ -1783,46 +1783,16 @@ export default function DashboardPage() {
             queueLength={queueLength}
             onOptimizePrompt={handleOptimizePrompt}
             isOptimizing={isOptimizingPrompt}
+            selectedVoice={selectedVoice}
+            setSelectedVoice={setSelectedVoice}
+            userVoices={userVoices}
+            onOpenVoiceRecorder={() => setShowVoiceRecorder(true)}
           />
 
           <VirtualPet
             isDark={isDark}
             isGenerating={isGenerating || isContinuing || isGeneratingVideo}
           />
-
-          {/* ─── Voice Selector (audio model) ─── */}
-          {isAudioModel && (
-            <div className={`fixed bottom-28 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2 rounded-xl border shadow-lg ${isDark ? "bg-slate-900/95 border-white/10" : "bg-white/95 border-slate-200"}`}>
-              <Radio size={14} className="text-indigo-500" />
-              <select
-                value={selectedVoice}
-                onChange={(e) => setSelectedVoice(e.target.value)}
-                className={`text-xs font-semibold px-2 py-1 rounded border focus:outline-none ${isDark ? "bg-slate-800 border-white/10 text-white" : "bg-slate-50 border-slate-200 text-slate-700"}`}
-              >
-                <optgroup label="Giọng có sẵn">
-                  {["Bình An", "Ngọc Linh", "Trúc Ly", "Mỹ Duyên", "Xuân Vĩnh", "Thái Sơn", "Gia Bảo", "Đức Trí", "Trọng Hữu", "Ngọc Lan"].map(v => (
-                    <option key={v} value={v}>{v}</option>
-                  ))}
-                </optgroup>
-                {userVoices.length > 0 && (
-                  <optgroup label="Giọng của bạn">
-                    {userVoices.map(v => (
-                      <option key={v.id} value={v.name}>{v.name}</option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => setShowVoiceRecorder(true)}
-                className={`text-xs gap-1 cursor-pointer ${isDark ? "text-indigo-400 hover:text-indigo-300" : "text-indigo-600 hover:text-indigo-500"}`}
-              >
-                <Mic size={12} /> Thu giọng
-              </Button>
-            </div>
-          )}
 
           {/* ─── Voice Recorder Modal ─── */}
           {showVoiceRecorder && (
