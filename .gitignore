@@ -3,6 +3,7 @@
 !/backend/
 !/frontend/
 !/runbook/
+!/tts_service/
 
 # Existing ignored paths
 tasks/
