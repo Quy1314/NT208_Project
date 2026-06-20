@@ -9,6 +9,7 @@ import os
 import time
 import json
 import base64
+import struct
 import base64
 import io
 import re
@@ -55,6 +56,21 @@ def _resolve_voice(db: Session, user_id: UUID, voice_name: str) -> tuple[str, st
             ref = get_signed_url(bucket, fname) or ref
         return "Bình An", ref
     return "Bình An", None
+
+
+def _ensure_wav_header(raw: bytes, sample_rate: int = 48000, channels: int = 1, bits: int = 16) -> bytes:
+    """Wrap raw PCM bytes in WAV header if no RIFF header present."""
+    if raw[:4] == b"RIFF":
+        return raw
+    byte_rate = sample_rate * channels * bits // 8
+    block_align = channels * bits // 8
+    data_size = len(raw)
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF", 36 + data_size, b"WAVE", b"fmt ", 16, 1, channels,
+        sample_rate, byte_rate, block_align, bits, b"data", data_size,
+    )
+    return header + raw
 # Text-to-image qua Hugging Face Inference (router); khớp dropdown frontend.
 HF_IMAGE_MODELS = frozenset(
     {
@@ -1267,6 +1283,7 @@ async def attach_audio(
     except Exception:
         raise HTTPException(status_code=400, detail="Dữ liệu audio_b64 không hợp lệ.")
 
+    audio_bytes = _ensure_wav_header(audio_bytes)
     stored_bytes, ext = to_mp3_if_possible(audio_bytes)
     audio_filename = f"audio_{pid}_{int(time.time() * 1000)}.{ext}"
     upload_dir = get_audio_upload_dir()
