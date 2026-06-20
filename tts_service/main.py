@@ -80,12 +80,22 @@ async def generate(
 
         logger.info(f"Generating TTS: text={text[:60]}... voice={voice} clone={ref_path is not None}")
         t0 = time.monotonic()
-        audio_bytes = _tts.infer(text, voice=voice, ref_audio=ref_path)
+        pcm = _tts.infer(text, voice=voice, ref_audio=ref_path)
         elapsed = time.monotonic() - t0
-        logger.info(f"Generated {len(audio_bytes)} bytes in {elapsed:.1f}s")
 
-        audio_b64 = base64.b64encode(audio_bytes).decode()
-        return {"audio_b64": audio_b64, "format": "wav", "length_bytes": len(audio_bytes), "time_s": round(elapsed, 2)}
+        # Save as proper WAV with header, then read back
+        wav_fd, wav_path = tempfile.mkstemp(suffix=".wav")
+        os.close(wav_fd)
+        try:
+            _tts.save(pcm, wav_path)
+            with open(wav_path, "rb") as f:
+                wav_bytes = f.read()
+        finally:
+            os.unlink(wav_path)
+
+        logger.info(f"Generated {len(wav_bytes)} bytes WAV in {elapsed:.1f}s")
+        audio_b64 = base64.b64encode(wav_bytes).decode()
+        return {"audio_b64": audio_b64, "format": "wav", "length_bytes": len(wav_bytes), "time_s": round(elapsed, 2)}
     finally:
         if ref_path and os.path.exists(ref_path):
             os.unlink(ref_path)
