@@ -115,6 +115,25 @@ function renderGeneratedContent(content: string, isDark: boolean, isStreaming: b
             />
           );
         }
+        if (seg.includes("<!-- audio_pending:")) {
+          const textPart = seg.split("<!-- audio_pending:")[0].trim();
+          return (
+            <div key={i}>
+              {textPart && (
+                <div className={`prose max-w-none whitespace-pre-wrap break-words leading-relaxed ${isDark ? "text-slate-200" : "text-slate-800"}`}>
+                  {textPart}
+                </div>
+              )}
+              <div className="flex items-center gap-2 mt-3 px-4 py-3 rounded-xl border border-dashed animate-pulse"
+                style={isDark ? { background: "rgba(99,102,241,0.08)", borderColor: "rgba(99,102,241,0.2)" } : { background: "rgba(99,102,241,0.04)", borderColor: "rgba(99,102,241,0.2)" }}>
+                <div className="w-4 h-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin shrink-0" />
+                <span className={`text-sm ${isDark ? "text-indigo-300" : "text-indigo-600"}`}>
+                  Đang tạo audio...
+                </span>
+              </div>
+            </div>
+          );
+        }
         if (seg.startsWith("[[USER_PROMPT]]")) {
           const promptText = seg.replace(/^\[\[USER_PROMPT\]\]\s*/, "").trim();
           return (

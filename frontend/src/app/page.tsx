@@ -1141,6 +1141,7 @@ export default function DashboardPage() {
                 fetchProjects();
               } catch (ttsErr) {
                 console.error("TTS direct call failed:", ttsErr);
+                alert("Tạo audio thất bại: " + (ttsErr instanceof Error ? ttsErr.message : String(ttsErr)));
               }
             })();
           }
@@ -1289,6 +1290,7 @@ export default function DashboardPage() {
                 fetchProjects();
               } catch (ttsErr) {
                 console.error("TTS direct call (continue) failed:", ttsErr);
+                alert("Tạo audio thất bại: " + (ttsErr instanceof Error ? ttsErr.message : String(ttsErr)));
               }
             })();
           }
