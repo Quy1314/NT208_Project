@@ -96,6 +96,35 @@ function buildProjectRequestHeaders(token: string | null): Record<string, string
   return headers;
 }
 
+const VIENEU_SERVICE_URL = "https://kiwi-1106-vienue-tts.hf.space";
+
+async function generateAudioDirect(text: string, voice: string): Promise<string> {
+  const params = new URLSearchParams({ text, voice });
+  const res = await fetch(`${VIENEU_SERVICE_URL}/generate?${params}`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || `TTS service HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  if (!data.audio_b64) throw new Error("TTS service returned no audio");
+  return data.audio_b64 as string;
+}
+
+async function attachAudioToProject(projectId: string, audioB64: string): Promise<void> {
+  const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+  const formData = new FormData();
+  formData.append("audio_b64", audioB64);
+  const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/attach-audio`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    console.error("Attach audio failed:", err);
+  }
+}
+
 function buildVideoGenerateRequestBody(
   prompt: string,
   selectedProject: Project | null,
@@ -1102,6 +1131,19 @@ export default function DashboardPage() {
           clearAttachedFile();
           setSelectedProject(data);
           fetchProjects();
+
+          if (isAudioModel) {
+            const textForTTS = promptText;
+            (async () => {
+              try {
+                const audioB64 = await generateAudioDirect(textForTTS, selectedVoice);
+                await attachAudioToProject(data.id, audioB64);
+                fetchProjects();
+              } catch (ttsErr) {
+                console.error("TTS direct call failed:", ttsErr);
+              }
+            })();
+          }
         }
       } else if (res.status === 401) {
         handleLogout();
@@ -1238,6 +1280,18 @@ export default function DashboardPage() {
           const data = await res.json();
           setSelectedProject(data);
           fetchProjects();
+
+          if (isAudioModel) {
+            (async () => {
+              try {
+                const audioB64 = await generateAudioDirect(promptText, selectedVoice);
+                await attachAudioToProject(data.id, audioB64);
+                fetchProjects();
+              } catch (ttsErr) {
+                console.error("TTS direct call (continue) failed:", ttsErr);
+              }
+            })();
+          }
         }
       } else if (res.status === 401) {
         handleLogout();

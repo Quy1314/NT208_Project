@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
@@ -8,6 +8,7 @@ from typing import Any, List, cast
 import os
 import time
 import json
+import base64
 import base64
 import io
 import re
@@ -999,41 +1000,11 @@ def create_project(
         )
         db.commit()
 
-        # 3. Nếu là audio model, tự động generate audio từ content vừa sinh
+        # 3. Audio model: chỉ lưu text, TTS sẽ được frontend gọi riêng
         if is_audio_model:
-            # Không để lỗi TTS làm fail toàn bộ thao tác tạo project.
-            try:
-                voice_name, ref_audio_url = _resolve_voice(db, current_user.id, data.voice or "Bình An")
-                audio_bytes = generate_audio_from_text(
-                    generated_content,
-                    data.language,
-                    voice=voice_name,
-                    ref_audio_url=ref_audio_url,
-                )
-                stored_bytes, ext = to_mp3_if_possible(audio_bytes)
-                audio_filename = f"audio_{new_project.id}_{int(time.time() * 1000)}.{ext}"
-                upload_dir = get_audio_upload_dir()
-                audio_path = os.path.join(upload_dir, audio_filename)
-                with open(audio_path, "wb") as f:
-                    f.write(stored_bytes)
-                    
-                audio_web_path = f"/uploads/audio/{audio_filename}"
-                new_project_obj = cast(Any, new_project)
-                new_project_obj.content = f"{new_project_obj.content}\n\n---\n\n{audio_web_path}"
-                
-                entry = db.query(models.ProjectContextEntry).filter(models.ProjectContextEntry.project_id == pid).order_by(models.ProjectContextEntry.created_at.desc()).first()
-                if entry:
-                    cast(Any, entry).generated_content = new_project_obj.content
-
-                audio_file = models.AudioFile(
-                    project_id=new_project.id,
-                    title=f"Audio for {new_project.title}",
-                    audio_url=audio_web_path,
-                )
-                db.add(audio_file)
-                db.commit()
-            except Exception as audio_err:
-                print(f"[WARN] TTS auto-generation failed for project {new_project.id}: {audio_err}")
+            new_project_obj = cast(Any, new_project)
+            new_project_obj.content = f"{new_project_obj.content}\n\n<!-- audio_pending: {generated_content} -->"
+            db.commit()
 
     new_project_obj = cast(Any, new_project)
     return models.ProjectResponse(
@@ -1107,34 +1078,7 @@ def continue_project(
 
     if is_audio_model:
         new_chunk_text = _extract_tts_text(data.prompt)
-        new_chunk = new_chunk_text
-        try:
-            voice_name, ref_audio_url = _resolve_voice(db, current_user.id, data.voice or "Bình An")
-            audio_bytes = generate_audio_from_text(
-                new_chunk_text,
-                data.language,
-                voice=voice_name,
-                ref_audio_url=ref_audio_url,
-            )
-            stored_bytes, ext = to_mp3_if_possible(audio_bytes)
-            audio_filename = f"audio_{pid}_{int(time.time() * 1000)}.{ext}"
-            upload_dir = get_audio_upload_dir()
-            os.makedirs(upload_dir, exist_ok=True)
-            audio_path = os.path.join(upload_dir, audio_filename)
-            with open(audio_path, "wb") as f:
-                f.write(stored_bytes)
-                
-            audio_web_path = f"/uploads/audio/{audio_filename}"
-            new_chunk = f"{new_chunk_text}\n\n---\n\n{audio_web_path}"
-
-            audio_file = models.AudioFile(
-                project_id=pid,
-                title=f"Audio for {project_title}",
-                audio_url=audio_web_path,
-            )
-            db.add(audio_file)
-        except Exception as audio_err:
-            print(f"[WARN] TTS auto-generation failed for project {pid}: {audio_err}")
+        new_chunk = f"{new_chunk_text}\n\n<!-- audio_pending: {new_chunk_text} -->"
 
     elif is_image_model:
         ensure_canon_scope(db, pid)
@@ -1302,6 +1246,55 @@ def continue_project(
         min_words=getattr(project_obj, "min_words", 1000),
         max_words=getattr(project_obj, "max_words", 2000),
     )
+
+
+@router.post("/{project_id}/attach-audio")
+async def attach_audio(
+    project_id: str,
+    audio_b64: str = Form(..., description="Base64-encoded WAV audio"),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    pid = _project_uuid(project_id)
+    project = db.query(models.Project).filter(models.Project.id == pid).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy Project.")
+    if getattr(project, "user_id", None) != getattr(current_user, "id", None):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập Project này.")
+
+    try:
+        audio_bytes = base64.b64decode(audio_b64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Dữ liệu audio_b64 không hợp lệ.")
+
+    stored_bytes, ext = to_mp3_if_possible(audio_bytes)
+    audio_filename = f"audio_{pid}_{int(time.time() * 1000)}.{ext}"
+    upload_dir = get_audio_upload_dir()
+    os.makedirs(upload_dir, exist_ok=True)
+    audio_path = os.path.join(upload_dir, audio_filename)
+    with open(audio_path, "wb") as f:
+        f.write(stored_bytes)
+
+    audio_web_path = f"/uploads/audio/{audio_filename}"
+    project_obj = cast(Any, project)
+    current_content = str(project_obj.content or "")
+    # Replace the pending marker with actual audio path
+    updated_content = current_content.replace(
+        f"<!-- audio_pending: {project.prompt} -->", audio_web_path
+    )
+    if updated_content == current_content:
+        updated_content = f"{current_content}\n\n---\n\n{audio_web_path}"
+    project_obj.content = updated_content
+
+    audio_file = models.AudioFile(
+        project_id=pid,
+        title=f"Audio for {project.title}",
+        audio_url=audio_web_path,
+    )
+    db.add(audio_file)
+    db.commit()
+
+    return {"audio_url": audio_web_path}
 
 
 @router.get("/{project_id}", response_model=models.ProjectResponse)
