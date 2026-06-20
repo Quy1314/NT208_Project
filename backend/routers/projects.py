@@ -1278,12 +1278,13 @@ async def attach_audio(
     audio_web_path = f"/uploads/audio/{audio_filename}"
     project_obj = cast(Any, project)
     current_content = str(project_obj.content or "")
-    # Replace the pending marker with actual audio path
+    # Replace the pending marker with audio path on its own segment
+    audio_block = f"\n\n---\n\n{audio_web_path}"
     updated_content = current_content.replace(
-        f"<!-- audio_pending: {project.prompt} -->", audio_web_path
+        f"<!-- audio_pending: {project.prompt} -->", audio_block
     )
     if updated_content == current_content:
-        updated_content = f"{current_content}\n\n---\n\n{audio_web_path}"
+        updated_content = f"{current_content}{audio_block}"
     project_obj.content = updated_content
 
     audio_file = models.AudioFile(
