@@ -249,7 +249,7 @@ export default function VirtualPet({ isDark, isGenerating }: VirtualPetProps) {
   // SSR Initial Position Setup
   useEffect(() => {
     const defaultX = window.innerWidth - 100;
-    const defaultY = window.innerHeight - 120;
+    const defaultY = window.innerHeight - 240;
     setPos({ x: defaultX, y: defaultY });
     anchorPosRef.current = { x: defaultX, y: defaultY };
     setIsInitialized(true);
@@ -914,7 +914,7 @@ export default function VirtualPet({ isDark, isGenerating }: VirtualPetProps) {
     <div 
       data-tour="tour-virtual-pet"
       onPointerDown={handlePointerDown}
-      className="fixed z-[9999] w-16 h-16 select-none touch-none group"
+      className="fixed z-[100000] w-16 h-16 select-none touch-none group"
       style={{
         left: `${pos.x}px`,
         top: `${pos.y}px`,
