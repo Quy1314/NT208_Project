@@ -912,6 +912,7 @@ export default function VirtualPet({ isDark, isGenerating }: VirtualPetProps) {
 
   return (
     <div 
+      data-tour="tour-virtual-pet"
       onPointerDown={handlePointerDown}
       className="fixed z-[9999] w-16 h-16 select-none touch-none group"
       style={{

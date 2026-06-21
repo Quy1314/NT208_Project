@@ -54,7 +54,7 @@ export default function ProjectSidebar({
   onOpenCanon,
 }: ProjectSidebarProps) {
   return (
-    <div className={`w-64 border-r flex flex-col pt-6 pb-4 px-4 hidden md:flex transition-all duration-300 ${
+    <div data-tour="tour-sidebar" className={`w-64 border-r flex flex-col pt-6 pb-4 px-4 hidden md:flex transition-all duration-300 ${
       isDark ? "bg-slate-900/40 backdrop-blur-xl border-white/10 text-white shadow-black/45" : "bg-slate-50 border-slate-100"
     }`}>
       <Link 
@@ -70,6 +70,7 @@ export default function ProjectSidebar({
       </Link>
 
       <Button
+        data-tour="tour-new-project-button"
         onClick={onCreateProjectStart}
         variant="outline"
         className={`mb-6 w-full justify-start gap-2 rounded-xl text-sm font-semibold transition-all ${

@@ -410,6 +410,7 @@ export default function WorkspaceComposerDock({
             
             {isTextModel && onOptimizePrompt && (
               <Button 
+                data-tour="tour-optimize-button"
                 type="button"
                 variant="ghost" 
                 size="sm" 

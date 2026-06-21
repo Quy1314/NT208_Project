@@ -25,6 +25,7 @@ import ProjectStage from "@/components/workspace/project_stage";
 import VirtualPet from "@/components/workspace/virtual_pet";
 import WorkspaceComposerDock, { ModelGroup } from "@/components/workspace/composer_bar";
 import WorkspaceModals from "@/components/workspace/workspace_modals";
+import OnboardingTour from "@/components/workspace/onboarding_tour";
 import { useWorkspaceStore, Project, TeamWorkspace, CanonCharacter, CanonLocation } from "@/store/useWorkspaceStore";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -278,6 +279,7 @@ export default function DashboardPage() {
   const [videoMessages, setVideoMessages] = useState<VideoChatMessage[]>([]);
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [isOptimizingPrompt, setIsOptimizingPrompt] = useState(false);
+  const [isTourOpen, setIsTourOpen] = useState(false);
 
   // File attachments and voice recording states
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -564,13 +566,24 @@ export default function DashboardPage() {
     fetchProjects();
     fetchTeams();
 
+    const tourSeen = localStorage.getItem("workspace_tour_seen");
+    let tourTimer: NodeJS.Timeout | null = null;
+    if (!tourSeen) {
+      tourTimer = setTimeout(() => {
+        setIsTourOpen(true);
+      }, 1200);
+    }
+
     const handleClickOutside = (event: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
         setIsUserMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      if (tourTimer) clearTimeout(tourTimer);
+    };
   }, [router, fetchProjects, fetchTeams]);
 
   const toggleTheme = () => {
@@ -1622,6 +1635,16 @@ export default function DashboardPage() {
               >
                 Trang chủ
               </Link>
+              <button
+                onClick={() => setIsTourOpen(true)}
+                className={`text-sm font-semibold px-3 py-1.5 rounded-full border transition-all flex items-center gap-1 cursor-pointer ${
+                  isDark
+                    ? "text-emerald-200 border-emerald-500/40 bg-slate-800 hover:bg-slate-700 hover:border-emerald-400"
+                    : "text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-300"
+                }`}
+              >
+                📖 Hướng dẫn
+              </button>
               <span
                 className={`text-sm font-semibold px-3 py-1.5 rounded-full ${
                   isDark ? "text-slate-100 bg-slate-800" : "text-slate-800 bg-slate-100"
@@ -1714,6 +1737,7 @@ export default function DashboardPage() {
 
           <main
             ref={mainScrollRef}
+            data-tour="tour-stage"
             data-testid="workspace-scroll-container"
             className="flex-1 overflow-y-auto px-4 pb-8"
           >
@@ -1912,6 +1936,11 @@ export default function DashboardPage() {
             personalizeMessage={personalizeMessage}
             onSavePersonalizeKey={savePersonalizeKey}
             onClearPersonalizeKey={clearPersonalizeKey}
+          />
+          <OnboardingTour
+            isOpen={isTourOpen}
+            onClose={() => setIsTourOpen(false)}
+            isDark={isDark}
           />
         </div>
       </div>
