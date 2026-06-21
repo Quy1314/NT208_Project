@@ -40,6 +40,13 @@ const STEPS: TourStep[] = [
     placement: "top"
   },
   {
+    title: "Bắt đầu sáng tạo",
+    content: "Nhấn nút này để bắt đầu gửi yêu cầu và tiến hành tạo nội dung (truyện, ảnh, audio hoặc video) bằng AI.",
+    selector: '[data-testid="workspace-submit-button"]',
+    icon: "🚀",
+    placement: "top"
+  },
+  {
     title: "Lựa chọn Mô hình AI",
     content: "Lựa chọn mô hình AI phù hợp cho tác vụ: Viết truyện (LLM), Tạo ảnh, Tạo audio hoặc Tạo video.",
     selector: 'select[title="Model Hugging Face (LLM hoặc text-to-image)"]',
