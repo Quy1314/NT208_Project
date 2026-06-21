@@ -12,5 +12,11 @@
       "src": "/(.*)",
       "dest": "backend/main.py"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/ping",
+      "schedule": "0 0 * * *"
+    }
   ]
 }

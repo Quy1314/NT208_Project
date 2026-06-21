@@ -199,6 +199,93 @@ try:
                 "message": str(e)
             }
 
+    def ping_redis_socket(redis_url: str) -> dict:
+        import socket
+        import ssl
+        from urllib.parse import urlparse
+        try:
+            if not redis_url:
+                return {"status": "SKIPPED", "message": "No Redis URL provided"}
+                
+            parsed = urlparse(redis_url)
+            host = parsed.hostname or "127.0.0.1"
+            port = parsed.port or 6379
+            password = parsed.password
+            
+            # Setup socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
+            
+            if parsed.scheme == "rediss":
+                context = ssl.create_default_context()
+                sock = context.wrap_socket(sock, server_hostname=host)
+                
+            sock.connect((host, port))
+            
+            # Authenticate if password exists
+            if password:
+                sock.sendall(f"AUTH {password}\r\n".encode())
+                auth_resp = sock.recv(1024).decode()
+                
+            # Send PING
+            sock.sendall(b"PING\r\n")
+            resp = sock.recv(1024).decode()
+            sock.close()
+            
+            if "PONG" in resp:
+                return {"status": "SUCCESS", "message": "Redis ping successful (PONG)"}
+            else:
+                return {"status": "FAIL", "message": f"Redis did not return PONG. Response: {resp[:100]}"}
+        except Exception as e:
+            return {"status": "ERROR", "message": str(e)}
+
+    @app.get("/api/cron/ping")
+    async def cron_ping(request: Request):
+        # Allow running in development or if header X-Vercel-Cron is present
+        is_vercel_cron = request.headers.get("x-vercel-cron") == "1"
+        is_dev = os.getenv("ENV") != "production"
+        
+        if not is_vercel_cron and not is_dev:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Unauthorized: This endpoint is only callable by Vercel scheduler or in development mode."}
+            )
+            
+        # Ping Supabase DB
+        db_status = "UNKNOWN"
+        db_message = ""
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text("SELECT 1"))
+                if result.scalar() == 1:
+                    db_status = "SUCCESS"
+                    db_message = "Supabase DB connection successful"
+                else:
+                    db_status = "FAIL"
+                    db_message = "Supabase DB query did not return expected value"
+        except Exception as e:
+            db_status = "ERROR"
+            db_message = str(e)
+            
+        # Ping Redis
+        redis_url = os.getenv("REDIS_URL") or os.getenv("KV_URL")
+        redis_result = ping_redis_socket(redis_url)
+        
+        # Overall status
+        overall_success = (db_status == "SUCCESS") and (redis_result["status"] in ["SUCCESS", "SKIPPED"])
+        
+        return {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "overall_status": "SUCCESS" if overall_success else "FAIL",
+            "services": {
+                "supabase_db": {
+                    "status": db_status,
+                    "message": db_message
+                },
+                "redis": redis_result
+            }
+        }
+
 except BaseException as err:
     # Lưu vết lỗi vào biến toàn cục để tránh NameError khi gọi API sau khi khối except đã kết thúc
     startup_error_str = str(err)
