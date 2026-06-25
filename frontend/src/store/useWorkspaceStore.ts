@@ -22,9 +22,14 @@ export interface CanonCharacter {
   id: string;
   slug: string;
   display_name: string;
+  visual_variant_label?: string;
+  outfit_summary?: string;
+  face_marks_json?: unknown[];
+  auto_discovered?: boolean;
 }
 
 export interface CanonLocation {
+  id?: string;
   slug: string;
   display_name: string;
   env_style_tags?: string[];

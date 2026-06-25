@@ -6,6 +6,17 @@ import Link from "next/link";
 import { API_BASE_URL } from "@/lib/api";
 import { downloadMarkdown, downloadPdf, downloadWord } from "@/lib/export_project";
 import { clearPersonalHfApiKey, getPersonalHfApiKey, setPersonalHfApiKey } from "@/lib/personal_hf";
+import {
+  PersonalizeCharacterProfile,
+  buildPersonalizedContext,
+  createEmptyCharacterProfile,
+  findMentionedCanonCharacterProfiles,
+  findMentionedCharacterProfiles,
+  findMentionedLocationProfiles,
+  getPersonalizeCharacterProfiles,
+  parseAliasInput,
+  setPersonalizeCharacterProfiles,
+} from "@/lib/personalize_characters";
 import { TranslationMode, translateProjectForExport } from "@/lib/translate_for_export";
 import { getTemplateById } from "@/lib/landing_templates";
 import {
@@ -275,6 +286,13 @@ export default function DashboardPage() {
 
   const [personalizeKeyInput, setPersonalizeKeyInput] = useState("");
   const [personalizeMessage, setPersonalizeMessage] = useState("");
+  const [characterProfiles, setCharacterProfiles] = useState<PersonalizeCharacterProfile[]>([]);
+  const [editingCharacterId, setEditingCharacterId] = useState<string | null>(null);
+  const [characterNameInput, setCharacterNameInput] = useState("");
+  const [characterAliasesInput, setCharacterAliasesInput] = useState("");
+  const [characterAppearanceInput, setCharacterAppearanceInput] = useState("");
+  const [characterPersonalityInput, setCharacterPersonalityInput] = useState("");
+  const [characterNotesInput, setCharacterNotesInput] = useState("");
 
   const [videoMessages, setVideoMessages] = useState<VideoChatMessage[]>([]);
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
@@ -488,6 +506,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setPersonalHfKeyActive(Boolean(getPersonalHfApiKey()));
+    setCharacterProfiles(getPersonalizeCharacterProfiles());
   }, []);
 
   // Mouse tracking logic for premium gravity parallax and ambient glow
@@ -701,12 +720,13 @@ export default function DashboardPage() {
     }
   };
 
-  const fetchCanonOverview = useCallback(async () => {
-    if (!selectedProject?.id) return;
+  const fetchCanonOverviewForProject = useCallback(async (projectId?: string) => {
+    const targetProjectId = projectId || selectedProject?.id;
+    if (!targetProjectId) return;
     setIsLoadingCanon(true);
     const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
     try {
-      const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/canon/overview`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${targetProjectId}/canon/overview`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -719,7 +739,35 @@ export default function DashboardPage() {
     } finally {
       setIsLoadingCanon(false);
     }
-  }, [selectedProject?.id]);
+  }, [selectedProject?.id, setCanonCharacters, setCanonLocations, setIsLoadingCanon]);
+
+  const fetchCanonOverview = useCallback(async () => {
+    await fetchCanonOverviewForProject();
+  }, [fetchCanonOverviewForProject]);
+
+
+  const handleAutoDiscoverCanon = async () => {
+    if (!selectedProject?.id) return;
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/canon/auto-discover`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        await fetchCanonOverviewForProject(selectedProject.id);
+        const chars = Array.isArray(data.characters) ? data.characters.length : 0;
+        const locs = Array.isArray(data.locations) ? data.locations.length : 0;
+        alert(chars || locs ? `Đã phát hiện thêm ${chars} nhân vật và ${locs} địa điểm từ nội dung AI.` : "Không tìm thấy nhân vật/địa điểm mới trong nội dung hiện tại.");
+      } else {
+        alert("Không thể quét canon từ nội dung hiện tại.");
+      }
+    } catch (e) {
+      console.error("Lỗi auto-discover canon:", e);
+      alert("Đã xảy ra lỗi khi quét canon.");
+    }
+  };
 
   const handleAddCharacter = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -815,6 +863,15 @@ export default function DashboardPage() {
       alert("Đã xảy ra lỗi.");
     }
   };
+
+  useEffect(() => {
+    if (selectedProject?.id) {
+      fetchCanonOverview();
+    } else {
+      setCanonCharacters([]);
+      setCanonLocations([]);
+    }
+  }, [selectedProject?.id, fetchCanonOverview, setCanonCharacters, setCanonLocations]);
 
   useEffect(() => {
     if (isCanonModalOpen && selectedProject?.id) {
@@ -967,6 +1024,89 @@ export default function DashboardPage() {
     }
   };
 
+  const buildPersonaContextForPrompt = useCallback((...texts: Array<string | undefined | null>) => {
+    const mentionedPersonalCharacters = findMentionedCharacterProfiles(characterProfiles, ...texts);
+    const mentionedCanonCharacters = findMentionedCanonCharacterProfiles(canonCharacters, ...texts);
+    const mentionedLocations = findMentionedLocationProfiles(canonLocations, ...texts);
+
+    return buildPersonalizedContext({
+      personalCharacters: mentionedPersonalCharacters,
+      canonCharacters: mentionedCanonCharacters,
+      locations: mentionedLocations,
+    });
+  }, [canonCharacters, canonLocations, characterProfiles]);
+
+  const clearCharacterProfileForm = useCallback(() => {
+    setEditingCharacterId(null);
+    setCharacterNameInput("");
+    setCharacterAliasesInput("");
+    setCharacterAppearanceInput("");
+    setCharacterPersonalityInput("");
+    setCharacterNotesInput("");
+  }, []);
+
+  const persistCharacterProfiles = useCallback((nextProfiles: PersonalizeCharacterProfile[]) => {
+    setCharacterProfiles(nextProfiles);
+    setPersonalizeCharacterProfiles(nextProfiles);
+  }, []);
+
+  const handleSaveCharacterProfile = useCallback((event: React.FormEvent) => {
+    event.preventDefault();
+    const name = characterNameInput.trim();
+    if (!name) {
+      setPersonalizeMessage("Vui lòng nhập tên nhân vật trước khi lưu.");
+      return;
+    }
+
+    const nextProfile: PersonalizeCharacterProfile = {
+      ...(editingCharacterId
+        ? characterProfiles.find((profile) => profile.id === editingCharacterId) || createEmptyCharacterProfile()
+        : createEmptyCharacterProfile()),
+      id: editingCharacterId || crypto.randomUUID(),
+      name,
+      aliases: parseAliasInput(characterAliasesInput),
+      appearance: characterAppearanceInput.trim(),
+      personality: characterPersonalityInput.trim(),
+      notes: characterNotesInput.trim(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const nextProfiles = editingCharacterId
+      ? characterProfiles.map((profile) => profile.id === editingCharacterId ? nextProfile : profile)
+      : [nextProfile, ...characterProfiles];
+
+    persistCharacterProfiles(nextProfiles);
+    clearCharacterProfileForm();
+    setPersonalizeMessage(`Đã lưu nhân vật ${name}. Khi prompt nhắc tên này, AI sẽ tự kéo hồ sơ nhân vật vào context.`);
+  }, [
+    characterAliasesInput,
+    characterAppearanceInput,
+    characterNameInput,
+    characterNotesInput,
+    characterPersonalityInput,
+    characterProfiles,
+    clearCharacterProfileForm,
+    editingCharacterId,
+    persistCharacterProfiles,
+  ]);
+
+  const handleEditCharacterProfile = useCallback((profile: PersonalizeCharacterProfile) => {
+    setEditingCharacterId(profile.id);
+    setCharacterNameInput(profile.name);
+    setCharacterAliasesInput(profile.aliases.join(", "));
+    setCharacterAppearanceInput(profile.appearance);
+    setCharacterPersonalityInput(profile.personality);
+    setCharacterNotesInput(profile.notes);
+    setPersonalizeMessage("");
+  }, []);
+
+  const handleDeleteCharacterProfile = useCallback((id: string) => {
+    const nextProfiles = characterProfiles.filter((profile) => profile.id !== id);
+    persistCharacterProfiles(nextProfiles);
+    if (editingCharacterId === id) clearCharacterProfileForm();
+    setPersonalizeMessage("Đã xóa nhân vật khỏi Personalize.");
+  }, [characterProfiles, clearCharacterProfileForm, editingCharacterId, persistCharacterProfiles]);
+
   const handleOptimizePrompt = async () => {
     const rawPrompt = selectedProject ? continuePrompt.trim() : prompt.trim();
     if (!rawPrompt) {
@@ -1052,11 +1192,12 @@ export default function DashboardPage() {
     if (attachedFile && attachedFileContent) {
       finalPromptText = `${promptText}\n\n--- [Nội dung file: ${attachedFile.name}] ---\n${attachedFileContent}\n---`;
     }
+    const personaContext = buildPersonaContextForPrompt(finalPromptText, finalTitle);
     try {
       const res = await fetch(`${API_BASE_URL}/api/projects/${streamParam}`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify(toProjectCreateApiPayload({ title: finalTitle, prompt: finalPromptText, language, modelName: modelName.trim(), minWords, maxWords, voice: isAudioModel ? selectedVoice : undefined })),
+        body: JSON.stringify(toProjectCreateApiPayload({ title: finalTitle, prompt: finalPromptText, language, modelName: modelName.trim(), minWords, maxWords, voice: isAudioModel ? selectedVoice : undefined, personaContext })),
       });
       if (res.ok) {
         if (isTextModel) {
@@ -1082,6 +1223,7 @@ export default function DashboardPage() {
           const decoder = new TextDecoder();
           let buffer = "";
           let accumulatedText = "";
+          let streamProjectId = "";
 
           try {
             while (true) {
@@ -1103,6 +1245,7 @@ export default function DashboardPage() {
                     const payload = JSON.parse(dataStr);
                     if (currentEvent === "init") {
                       const pid = payload.id;
+                      streamProjectId = typeof pid === "string" ? pid : "";
                       setSelectedProject(prev => {
                         if (!prev) return null;
                         return { ...prev, id: pid };
@@ -1122,6 +1265,9 @@ export default function DashboardPage() {
                         });
                       }
                       fetchProjects();
+                      if (streamProjectId) void fetchCanonOverviewForProject(streamProjectId);
+                    } else if (currentEvent === "canon") {
+                      if (streamProjectId) void fetchCanonOverviewForProject(streamProjectId);
                     } else if (currentEvent === "error") {
                       alert(`Stream error: ${payload.detail}`);
                     }
@@ -1144,6 +1290,7 @@ export default function DashboardPage() {
           clearAttachedFile();
           setSelectedProject(data);
           fetchProjects();
+          if (data?.id) void fetchCanonOverviewForProject(data.id);
 
           if (isAudioModel) {
             const textForTTS = promptText;
@@ -1216,6 +1363,12 @@ export default function DashboardPage() {
     } else if (overridePrompt === undefined) {
       clearAttachedFile();
     }
+    const personaContext = buildPersonaContextForPrompt(
+      finalPromptText,
+      selectedProject.title,
+      selectedProject.prompt,
+      selectedProject.content
+    );
     setContinuePrompt("");
     const prevContent = selectedProject.content || "";
 
@@ -1223,7 +1376,7 @@ export default function DashboardPage() {
       const res = await fetch(`${API_BASE_URL}/api/projects/${selectedProject.id}/continue${streamParam}`, {
         method: "POST",
         headers: buildProjectRequestHeaders(token),
-        body: JSON.stringify(toProjectContinueApiPayload({ prompt: finalPromptText, language, modelName: modelName.trim(), minWords, maxWords, voice: isAudioModel ? selectedVoice : undefined })),
+        body: JSON.stringify(toProjectContinueApiPayload({ prompt: finalPromptText, language, modelName: modelName.trim(), minWords, maxWords, voice: isAudioModel ? selectedVoice : undefined, personaContext })),
       });
       if (res.ok) {
         if (isTextModel) {
@@ -1276,6 +1429,9 @@ export default function DashboardPage() {
                         });
                       }
                       fetchProjects();
+                      if (selectedProject.id) void fetchCanonOverviewForProject(selectedProject.id);
+                    } else if (currentEvent === "canon") {
+                      if (selectedProject.id) void fetchCanonOverviewForProject(selectedProject.id);
                     } else if (currentEvent === "error") {
                       alert(`Stream error: ${payload.detail}`);
                     }
@@ -1294,6 +1450,7 @@ export default function DashboardPage() {
           const data = await res.json();
           setSelectedProject(data);
           fetchProjects();
+          if (selectedProject.id) void fetchCanonOverviewForProject(selectedProject.id);
 
           if (isAudioModel) {
             (async () => {
@@ -1357,6 +1514,7 @@ export default function DashboardPage() {
   const openPersonalize = () => {
     setIsUserMenuOpen(false);
     setPersonalizeKeyInput(getPersonalHfApiKey() || "");
+    setCharacterProfiles(getPersonalizeCharacterProfiles());
     setPersonalizeMessage("");
     setIsPersonalizeOpen(true);
   };
@@ -1930,12 +2088,29 @@ export default function DashboardPage() {
             onAddCharacter={handleAddCharacter}
             onSaveVisualVariant={handleSaveVisualVariant}
             onAddLocation={handleAddLocation}
+            onAutoDiscoverCanon={handleAutoDiscoverCanon}
             onExportProject={handleExportProject}
             personalizeKeyInput={personalizeKeyInput}
             setPersonalizeKeyInput={setPersonalizeKeyInput}
             personalizeMessage={personalizeMessage}
             onSavePersonalizeKey={savePersonalizeKey}
             onClearPersonalizeKey={clearPersonalizeKey}
+            characterProfiles={characterProfiles}
+            editingCharacterId={editingCharacterId}
+            characterNameInput={characterNameInput}
+            setCharacterNameInput={setCharacterNameInput}
+            characterAliasesInput={characterAliasesInput}
+            setCharacterAliasesInput={setCharacterAliasesInput}
+            characterAppearanceInput={characterAppearanceInput}
+            setCharacterAppearanceInput={setCharacterAppearanceInput}
+            characterPersonalityInput={characterPersonalityInput}
+            setCharacterPersonalityInput={setCharacterPersonalityInput}
+            characterNotesInput={characterNotesInput}
+            setCharacterNotesInput={setCharacterNotesInput}
+            onSaveCharacterProfile={handleSaveCharacterProfile}
+            onEditCharacterProfile={handleEditCharacterProfile}
+            onDeleteCharacterProfile={handleDeleteCharacterProfile}
+            onClearCharacterProfileForm={clearCharacterProfileForm}
           />
           <OnboardingTour
             isOpen={isTourOpen}

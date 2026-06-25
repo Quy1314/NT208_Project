@@ -5,6 +5,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 from typing import Any, List, cast
+from collections import Counter
+import unicodedata
 import os
 import time
 import json
@@ -28,7 +30,13 @@ from auth import get_current_user
 
 from image_pipeline.pipeline import canon_engine_enabled, run_canon_image_pipeline
 from retrieval.service import append_chunks_for_new_segment, ensure_canon_scope
-from services.canon_queries import project_has_canon_characters
+from services.canon_queries import (
+    ensure_default_visual_variant,
+    get_character_by_slug,
+    get_location_by_slug,
+    project_has_canon_characters,
+)
+import lore.db_models as lore_models
 from story_engine.context_pack import build_story_context_pack, build_context_messages
 
 # Tạo Router cho group API liên quan đến Dự án, có prefix là /api/projects
@@ -119,6 +127,249 @@ def _project_uuid(project_id: str | UUID) -> UUID:
         return UUID(project_id)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Không tìm thấy Project.")
+
+
+def _apply_persona_context(instruction: str, persona_context: str | None) -> str:
+    """Attach user-selected character profiles to the generation instruction without storing them as project prose."""
+    ctx = (persona_context or "").strip()
+    base = (instruction or "").strip()
+    if not ctx:
+        return instruction
+    # Keep requests bounded; the frontend already filters to mentioned characters, this is a final guard.
+    if len(ctx) > 8000:
+        ctx = ctx[:8000].rstrip() + "\n[persona context truncated]"
+    if not base:
+        return ctx
+    return f"{ctx}\n\nUSER REQUEST:\n{base}"
+
+
+
+
+_ENTITY_SCAN_MAX_TEXT = 24000
+_ENTITY_STOPWORDS = {
+    "AI", "API", "HTTP", "URL", "JSON", "JWT", "UUID", "Hugging Face", "Inference API",
+    "Payment Required", "Forbidden", "Client Error", "For More Information", "Root", "Request ID",
+    "Nội Dung", "Nội Dung AI", "User Prompt", "Chương", "Bước Đầu Tiên", "Hợp Tác Khoa Học",
+    "Trở Về", "Lời Hứa", "Sự Hợp Tác", "Sự Phát Triển", "Một Tương Lai", "Đối Thoại",
+    "Ngày", "Sau", "Khi", "Trong", "Trên", "Dưới", "Bên", "Từ", "Và", "Nhưng", "Ông", "Bà", "Cô", "Anh", "Em",
+    "The", "This", "That", "Chapter", "Scene", "User", "Assistant", "Content", "Generated Content",
+}
+_LOCATION_KEYWORDS = {
+    "sao", "hành tinh", "trái đất", "mars", "earth", "city", "thành phố", "vương quốc", "làng", "đảo", "rừng",
+    "núi", "hang", "động", "tàu", "con tàu", "trạm", "căn cứ", "vũ trụ", "neo", "seoul", "quán", "cafe", "cà phê",
+}
+_LOCATION_CUE_RE = re.compile(
+    r"(?:ở|tại|trên|trong|bên trong|đến|tới|về|quay lại|rời khỏi|from|at|in|inside|to|toward)\s+"
+    r"([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][\wÀ-ỹ'’-]*(?:\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][\wÀ-ỹ'’-]*){0,4})",
+    re.UNICODE,
+)
+_PROPER_NOUN_RE = re.compile(
+    r"\b([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][\wÀ-ỹ'’-]*(?:\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][\wÀ-ỹ'’-]*){0,3})\b",
+    re.UNICODE,
+)
+
+
+def _strip_accents(value: str) -> str:
+    value = unicodedata.normalize("NFD", value or "")
+    value = "".join(ch for ch in value if unicodedata.category(ch) != "Mn")
+    return value.replace("đ", "d").replace("Đ", "D")
+
+
+def _canon_slug(value: str) -> str:
+    ascii_value = _strip_accents(value).lower()
+    slug = re.sub(r"[^a-z0-9]+", "_", ascii_value).strip("_")
+    return slug[:120] or "auto_entity"
+
+
+def _normalize_entity_name(value: str) -> str:
+    value = re.sub(r"[\*_`#>\[\](){}]", " ", value or "")
+    value = re.sub(r"\s+", " ", value).strip(" .,:;!?\"'“”‘’-/\\")
+    return value
+
+
+def _entity_key(value: str) -> str:
+    return re.sub(r"\s+", " ", _strip_accents(_normalize_entity_name(value)).lower()).strip()
+
+
+def _looks_like_generation_error(text: str) -> bool:
+    low = (text or "").lower()
+    markers = [
+        "huggin face bị gián đoạn",
+        "hugging face bị gián đoạn",
+        "payment required",
+        "403 forbidden",
+        "client error",
+        "inference providers",
+        "cannot access content",
+    ]
+    return any(marker in low for marker in markers)
+
+
+def _clean_entity_scan_text(text: str) -> str:
+    text = (text or "")[:_ENTITY_SCAN_MAX_TEXT]
+    # Do not scan markdown headings because they produce many false-positive title-like names.
+    lines = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            lines.append("")
+            continue
+        if stripped.startswith("#") or stripped.startswith("[[USER_PROMPT]]"):
+            continue
+        if stripped.lower().startswith("nội dung ai đã tạo"):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _is_stop_entity(name: str) -> bool:
+    clean = _normalize_entity_name(name)
+    if not clean or len(clean) < 2:
+        return True
+    key = _entity_key(clean)
+    stop_keys = {_entity_key(x) for x in _ENTITY_STOPWORDS}
+    if key in stop_keys:
+        return True
+    words = clean.split()
+    if len(words) > 5:
+        return True
+    if any(len(w) > 32 for w in words):
+        return True
+    if re.search(r"\d", clean):
+        return True
+    # Avoid common sentence-openers being treated as one-word names.
+    if len(words) == 1 and key in {
+        "sau", "khi", "trong", "tren", "duoi", "mot", "nhung", "va", "ong", "ba", "co", "anh", "em", "toi", "ho", "cac",
+        "ngay", "luc", "neu", "vi", "boi", "tai", "day", "do", "nay", "kia", "chapter", "scene",
+    }:
+        return True
+    return False
+
+
+def _looks_like_location_name(name: str) -> bool:
+    key = _entity_key(name)
+    return any(keyword in key for keyword in _LOCATION_KEYWORDS)
+
+
+def _count_entity_mentions(text: str, name: str) -> int:
+    clean_name = re.escape(_normalize_entity_name(name))
+    if not clean_name:
+        return 0
+    pattern = re.compile(rf"(?<![\wÀ-ỹ]){clean_name}(?![\wÀ-ỹ])", re.IGNORECASE | re.UNICODE)
+    return len(pattern.findall(text))
+
+
+def _extract_auto_canon_candidates(text: str) -> tuple[list[str], list[str]]:
+    """Heuristic extraction for newly generated prose. Keeps false positives low and requires no extra AI API call."""
+    if not text or _looks_like_generation_error(text):
+        return [], []
+    scan_text = _clean_entity_scan_text(text)
+    if not scan_text.strip():
+        return [], []
+
+    location_counts: Counter[str] = Counter()
+    for match in _LOCATION_CUE_RE.finditer(scan_text):
+        name = _normalize_entity_name(match.group(1))
+        if name and not _is_stop_entity(name):
+            location_counts[name] += 2
+
+    proper_counts: Counter[str] = Counter()
+    for match in _PROPER_NOUN_RE.finditer(scan_text):
+        name = _normalize_entity_name(match.group(1))
+        if not name or _is_stop_entity(name):
+            continue
+        # Do not treat long title-ish phrases as entity names.
+        if len(name.split()) >= 4 and not _looks_like_location_name(name):
+            continue
+        proper_counts[name] += 1
+
+    for name, count in proper_counts.items():
+        if _looks_like_location_name(name):
+            location_counts[name] += count
+
+    character_candidates: list[str] = []
+    location_candidates: list[str] = []
+    seen_chars: set[str] = set()
+    seen_locs: set[str] = set()
+
+    for name, count in proper_counts.most_common(20):
+        if _looks_like_location_name(name):
+            continue
+        words = name.split()
+        mentions = max(count, _count_entity_mentions(scan_text, name))
+        # Multi-word names can appear once; single-word names need repetition to avoid random capitalized sentence starts.
+        if len(words) >= 2 or mentions >= 2:
+            key = _entity_key(name)
+            if key not in seen_chars:
+                seen_chars.add(key)
+                character_candidates.append(name)
+        if len(character_candidates) >= 8:
+            break
+
+    for name, count in location_counts.most_common(12):
+        mentions = max(count, _count_entity_mentions(scan_text, name))
+        if mentions < 1:
+            continue
+        key = _entity_key(name)
+        if key in seen_locs:
+            continue
+        seen_locs.add(key)
+        location_candidates.append(name)
+        if len(location_candidates) >= 6:
+            break
+
+    # If the same candidate appears in both buckets, keep it as a location when it has a location keyword.
+    loc_keys = {_entity_key(x) for x in location_candidates}
+    character_candidates = [x for x in character_candidates if _entity_key(x) not in loc_keys]
+    return character_candidates, location_candidates
+
+
+def _auto_discover_canon_entities(db: Session, project_id: UUID, generated_text: str) -> dict[str, list[str]]:
+    """Auto-add characters/locations created by AI so the user can track them in Canon.
+
+    This intentionally stores only lightweight names/tags. The user can later edit appearance,
+    personality, and setting details in the Canon sidebar.
+    """
+    characters, locations = _extract_auto_canon_candidates(generated_text)
+    if not characters and not locations:
+        return {"characters": [], "locations": []}
+
+    scope = ensure_canon_scope(db, project_id)
+    created_characters: list[str] = []
+    created_locations: list[str] = []
+
+    for name in characters:
+        slug = _canon_slug(name)
+        if get_character_by_slug(db, cast(UUID, cast(Any, scope).id), slug):
+            continue
+        row = lore_models.CanonCharacter(
+            scope_id=cast(Any, scope).id,
+            slug=slug,
+            display_name=name,
+            personality_json={"auto_discovered": True, "source": "ai_generated_content"},
+        )
+        db.add(row)
+        db.flush()
+        ensure_default_visual_variant(db, cast(UUID, cast(Any, row).id))
+        created_characters.append(name)
+
+    for name in locations:
+        slug = _canon_slug(name)
+        if get_location_by_slug(db, cast(UUID, cast(Any, scope).id), slug):
+            continue
+        row = lore_models.CanonLocation(
+            scope_id=cast(Any, scope).id,
+            slug=slug,
+            display_name=name,
+            env_style_tags=["auto-discovered"],
+        )
+        db.add(row)
+        created_locations.append(name)
+
+    db.commit()
+    if created_characters or created_locations:
+        print(f"[CANON] Auto-discovered characters={created_characters} locations={created_locations}")
+    return {"characters": created_characters, "locations": created_locations}
 
 
 def _build_recent_context(db: Session, project_id: str | UUID) -> str:
@@ -876,6 +1127,7 @@ def create_project(
     audio_models = [VIENEU_TTS_MODEL, FPT_TTS_MODEL]
     is_audio_model = data.model_name and data.model_name in audio_models
     is_image_model = bool(data.model_name and data.model_name in HF_IMAGE_MODELS)
+    effective_prompt = _apply_persona_context(data.prompt, data.persona_context)
 
     # 1. Tạo project trước để canon_scope / lore FK có project_id ổn định
     new_project = models.Project(
@@ -898,13 +1150,13 @@ def create_project(
         ensure_canon_scope(db, pid)
         mid = (data.model_name or "").strip() or "black-forest-labs/FLUX.1-schnell"
         if canon_engine_enabled() and project_has_canon_characters(db, pid):
-            out, _meta = run_canon_image_pipeline(db, pid, data.prompt, mid, x_hf_api_key)
+            out, _meta = run_canon_image_pipeline(db, pid, effective_prompt, mid, x_hf_api_key)
             generated_content = (
-                out if out.startswith("data:image") else generate_image_content(data.prompt, data.model_name, x_hf_api_key)
+                out if out.startswith("data:image") else generate_image_content(effective_prompt, data.model_name, x_hf_api_key)
             )
         else:
             generated_content = generate_image_content(
-                instruction=data.prompt,
+                instruction=effective_prompt,
                 model_name=data.model_name,
                 hf_api_key=x_hf_api_key,
             )
@@ -912,7 +1164,7 @@ def create_project(
         scope = ensure_canon_scope(db, pid)
         pack = None
         if canon_engine_enabled():
-            pack = build_story_context_pack(db, pid, data.prompt, x_hf_api_key, project_content="")
+            pack = build_story_context_pack(db, pid, effective_prompt, x_hf_api_key, project_content="")
         
         if stream:
             def event_generator():
@@ -923,7 +1175,7 @@ def create_project(
                         db=db,
                         project_id=pid,
                         title=data.title,
-                        instruction=data.prompt,
+                        instruction=effective_prompt,
                         language=data.language,
                         model_name=data.model_name,
                         hf_api_key=x_hf_api_key,
@@ -963,6 +1215,10 @@ def create_project(
                             append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), generated_content, x_hf_api_key)
                         except Exception as chunk_err:
                             print(f"[WARN] lore chunk append failed: {chunk_err}")
+
+                    canon_update = _auto_discover_canon_entities(db, pid, generated_content)
+                    if canon_update["characters"] or canon_update["locations"]:
+                        yield f"event: canon\ndata: {json.dumps(canon_update)}\n\n"
                 except Exception as stream_err:
                     print(f"[ERROR] Stream generator error: {stream_err}")
                     proj = db.query(models.Project).filter(models.Project.id == pid).first()
@@ -979,7 +1235,7 @@ def create_project(
                 db=db,
                 project_id=pid,
                 title=data.title,
-                instruction=data.prompt,
+                instruction=effective_prompt,
                 language=data.language,
                 model_name=data.model_name,
                 hf_api_key=x_hf_api_key,
@@ -1015,6 +1271,9 @@ def create_project(
             )
         )
         db.commit()
+
+        if not (is_audio_model or is_image_model):
+            _auto_discover_canon_entities(db, pid, generated_content)
 
         # 3. Audio model: chỉ lưu text, TTS sẽ được frontend gọi riêng
         if is_audio_model:
@@ -1076,6 +1335,7 @@ def continue_project(
     audio_models = [VIENEU_TTS_MODEL, FPT_TTS_MODEL]
     is_audio_model = data.model_name and data.model_name in audio_models
     is_image_model = bool(data.model_name and data.model_name in HF_IMAGE_MODELS)
+    effective_prompt = _apply_persona_context(data.prompt, data.persona_context)
 
     # Cấu hình min/max words
     proj_min = getattr(project, "min_words", None)
@@ -1100,13 +1360,13 @@ def continue_project(
         ensure_canon_scope(db, pid)
         mid = (data.model_name or "").strip() or "black-forest-labs/FLUX.1-schnell"
         if canon_engine_enabled() and project_has_canon_characters(db, pid):
-            out, _meta = run_canon_image_pipeline(db, pid, data.prompt, mid, x_hf_api_key)
+            out, _meta = run_canon_image_pipeline(db, pid, effective_prompt, mid, x_hf_api_key)
             new_chunk = (
-                out if out.startswith("data:image") else generate_image_content(data.prompt, data.model_name, x_hf_api_key)
+                out if out.startswith("data:image") else generate_image_content(effective_prompt, data.model_name, x_hf_api_key)
             )
         else:
             new_chunk = generate_image_content(
-                instruction=data.prompt,
+                instruction=effective_prompt,
                 model_name=data.model_name,
                 hf_api_key=x_hf_api_key,
             )
@@ -1114,7 +1374,7 @@ def continue_project(
         scope = ensure_canon_scope(db, pid)
         pack = None
         if canon_engine_enabled():
-            pack = build_story_context_pack(db, pid, data.prompt, x_hf_api_key, project_content=project_content)
+            pack = build_story_context_pack(db, pid, effective_prompt, x_hf_api_key, project_content=project_content)
         
         if stream:
             def event_generator():
@@ -1125,7 +1385,7 @@ def continue_project(
                         db=db,
                         project_id=pid,
                         title=project_title,
-                        instruction=data.prompt,
+                        instruction=effective_prompt,
                         language=data.language,
                         model_name=data.model_name,
                         hf_api_key=x_hf_api_key,
@@ -1176,6 +1436,10 @@ def continue_project(
                             append_chunks_for_new_segment(db, cast(UUID, cast(Any, scope).id), new_chunk, x_hf_api_key)
                         except Exception as chunk_err:
                             print(f"[WARN] lore chunk append failed: {chunk_err}")
+
+                    canon_update = _auto_discover_canon_entities(db, pid, new_chunk)
+                    if canon_update["characters"] or canon_update["locations"]:
+                        yield f"event: canon\ndata: {json.dumps(canon_update)}\n\n"
                 except Exception as stream_err:
                     print(f"[ERROR] Stream generator error: {stream_err}")
                     if new_chunk.strip():
@@ -1205,7 +1469,7 @@ def continue_project(
                 db=db,
                 project_id=pid,
                 title=project_title,
-                instruction=data.prompt,
+                instruction=effective_prompt,
                 language=data.language,
                 model_name=data.model_name,
                 hf_api_key=x_hf_api_key,
@@ -1251,6 +1515,9 @@ def continue_project(
             )
         )
         db.commit()
+
+        if not (is_audio_model or is_image_model):
+            _auto_discover_canon_entities(db, pid, new_chunk)
 
     project_obj = cast(Any, project)
     return models.ProjectResponse(

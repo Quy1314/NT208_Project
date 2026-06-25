@@ -206,6 +206,7 @@ class ProjectCreateReq(BaseModel):
     min_words: int | None = 1000
     max_words: int | None = 2000
     voice: str | None = None
+    persona_context: str | None = None
 
 class ProjectContinueReq(BaseModel):
     prompt: str
@@ -214,6 +215,7 @@ class ProjectContinueReq(BaseModel):
     min_words: int | None = 1000
     max_words: int | None = 2000
     voice: str | None = None
+    persona_context: str | None = None
 
 class TitleGenerateReq(BaseModel):
     prompt: str

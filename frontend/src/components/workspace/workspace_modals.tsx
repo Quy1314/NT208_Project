@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWorkspaceStore, TranslationMode } from "@/store/useWorkspaceStore";
 import { hfImageModelOptions } from "@/lib/hf_models";
+import { PersonalizeCharacterProfile } from "@/lib/personalize_characters";
 
 interface WorkspaceModalsProps {
   currentPasswordState: {
@@ -22,12 +23,29 @@ interface WorkspaceModalsProps {
   onAddCharacter: (e: React.FormEvent) => void;
   onSaveVisualVariant: (e: React.FormEvent) => void;
   onAddLocation: (e: React.FormEvent) => void;
+  onAutoDiscoverCanon: () => void;
   onExportProject: (format: "md" | "pdf" | "docx", translationMode: TranslationMode) => void;
   personalizeKeyInput: string;
   setPersonalizeKeyInput: (v: string) => void;
   personalizeMessage: string;
   onSavePersonalizeKey: () => void;
   onClearPersonalizeKey: () => void;
+  characterProfiles: PersonalizeCharacterProfile[];
+  editingCharacterId: string | null;
+  characterNameInput: string;
+  setCharacterNameInput: (v: string) => void;
+  characterAliasesInput: string;
+  setCharacterAliasesInput: (v: string) => void;
+  characterAppearanceInput: string;
+  setCharacterAppearanceInput: (v: string) => void;
+  characterPersonalityInput: string;
+  setCharacterPersonalityInput: (v: string) => void;
+  characterNotesInput: string;
+  setCharacterNotesInput: (v: string) => void;
+  onSaveCharacterProfile: (e: React.FormEvent) => void;
+  onEditCharacterProfile: (profile: PersonalizeCharacterProfile) => void;
+  onDeleteCharacterProfile: (id: string) => void;
+  onClearCharacterProfileForm: () => void;
 }
 
 export default function WorkspaceModals({
@@ -40,12 +58,29 @@ export default function WorkspaceModals({
   onAddCharacter,
   onSaveVisualVariant,
   onAddLocation,
+  onAutoDiscoverCanon,
   onExportProject,
   personalizeKeyInput,
   setPersonalizeKeyInput,
   personalizeMessage,
   onSavePersonalizeKey,
   onClearPersonalizeKey,
+  characterProfiles,
+  editingCharacterId,
+  characterNameInput,
+  setCharacterNameInput,
+  characterAliasesInput,
+  setCharacterAliasesInput,
+  characterAppearanceInput,
+  setCharacterAppearanceInput,
+  characterPersonalityInput,
+  setCharacterPersonalityInput,
+  characterNotesInput,
+  setCharacterNotesInput,
+  onSaveCharacterProfile,
+  onEditCharacterProfile,
+  onDeleteCharacterProfile,
+  onClearCharacterProfileForm,
 }: WorkspaceModalsProps) {
   const {
     isDark,
@@ -63,7 +98,6 @@ export default function WorkspaceModals({
     setIsCanonModalOpen,
     isExportPanelOpen,
     setIsExportPanelOpen,
-    personalHfKeyActive,
     exportFormatChoice,
     setExportFormatChoice,
     exportTranslationMode,
@@ -264,6 +298,135 @@ export default function WorkspaceModals({
                 <strong className="text-[#9ca3af]">dropdown trên thanh chat</strong> (danh sách đã cài đặt). Token HF
                 cá nhân chỉ thay key gọi API; không có token thì server dùng key mặc định (nếu có).
               </p>
+
+              <div className={`rounded-xl border p-4 space-y-4 ${isDark ? "border-white/10 bg-slate-950/40" : "border-slate-200 bg-slate-50"}`}>
+                <div>
+                  <p className="text-sm font-semibold text-[#e5e7eb]">Nhân vật dùng lại</p>
+                  <p className="text-[11px] text-[#8c8f99] mt-1 leading-relaxed">
+                    Lưu nhân vật ở đây. Khi prompt tạo project hoặc viết tiếp nhắc đúng tên/alias, hệ thống tự gửi hồ sơ nhân vật vào context cho AI.
+                  </p>
+                </div>
+
+                {characterProfiles.length > 0 && (
+                  <div className="space-y-2">
+                    {characterProfiles.map((profile) => (
+                      <div
+                        key={profile.id}
+                        className={`rounded-lg border p-3 ${isDark ? "border-white/10 bg-white/[0.03]" : "border-slate-200 bg-white"}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{profile.name}</p>
+                            {profile.aliases.length > 0 && (
+                              <p className="text-[10px] text-slate-500 truncate">alias: {profile.aliases.join(", ")}</p>
+                            )}
+                          </div>
+                          <div className="flex gap-2 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => onEditCharacterProfile(profile)}
+                              className="text-blue-300 hover:text-blue-200 cursor-pointer"
+                            >
+                              Sửa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onDeleteCharacterProfile(profile.id)}
+                              className="text-red-300 hover:text-red-200 cursor-pointer"
+                            >
+                              Xóa
+                            </button>
+                          </div>
+                        </div>
+                        {(profile.appearance || profile.personality) && (
+                          <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-slate-400">
+                            {[profile.appearance, profile.personality].filter(Boolean).join(" • ")}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <form onSubmit={onSaveCharacterProfile} className="space-y-3 border-t border-white/5 pt-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-[#cdd0d5]">
+                      {editingCharacterId ? "Sửa hồ sơ nhân vật" : "Thêm nhân vật"}
+                    </p>
+                    {editingCharacterId && (
+                      <button
+                        type="button"
+                        onClick={onClearCharacterProfileForm}
+                        className="text-[11px] text-slate-400 hover:text-white cursor-pointer"
+                      >
+                        Hủy sửa
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={characterNameInput}
+                    onChange={(e) => setCharacterNameInput(e.target.value)}
+                    placeholder="Tên nhân vật, ví dụ: Nhân A"
+                    className={`w-full rounded-xl px-4 py-3 text-[14px] outline-none border ${
+                      isDark
+                        ? "bg-slate-950/40 border-white/10 text-white placeholder-slate-600 focus:border-blue-500/50"
+                        : "bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-500"
+                    }`}
+                  />
+                  <input
+                    type="text"
+                    value={characterAliasesInput}
+                    onChange={(e) => setCharacterAliasesInput(e.target.value)}
+                    placeholder="Alias cách nhau bằng dấu phẩy: A, Anna, cô A..."
+                    className={`w-full rounded-xl px-4 py-3 text-[14px] outline-none border ${
+                      isDark
+                        ? "bg-slate-950/40 border-white/10 text-white placeholder-slate-600 focus:border-blue-500/50"
+                        : "bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-500"
+                    }`}
+                  />
+                  <textarea
+                    value={characterAppearanceInput}
+                    onChange={(e) => setCharacterAppearanceInput(e.target.value)}
+                    rows={3}
+                    placeholder="Ngoại hình: tóc, mắt, trang phục, dấu hiệu nhận diện..."
+                    className={`w-full resize-none rounded-xl px-4 py-3 text-[14px] outline-none border ${
+                      isDark
+                        ? "bg-slate-950/40 border-white/10 text-white placeholder-slate-600 focus:border-blue-500/50"
+                        : "bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-500"
+                    }`}
+                  />
+                  <textarea
+                    value={characterPersonalityInput}
+                    onChange={(e) => setCharacterPersonalityInput(e.target.value)}
+                    rows={3}
+                    placeholder="Tính cách: lạnh lùng, hài hước, hay nghi ngờ, nói ít..."
+                    className={`w-full resize-none rounded-xl px-4 py-3 text-[14px] outline-none border ${
+                      isDark
+                        ? "bg-slate-950/40 border-white/10 text-white placeholder-slate-600 focus:border-blue-500/50"
+                        : "bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-500"
+                    }`}
+                  />
+                  <textarea
+                    value={characterNotesInput}
+                    onChange={(e) => setCharacterNotesInput(e.target.value)}
+                    rows={3}
+                    placeholder="Ghi chú continuity: quá khứ, quan hệ, mục tiêu, điều cấm thay đổi..."
+                    className={`w-full resize-none rounded-xl px-4 py-3 text-[14px] outline-none border ${
+                      isDark
+                        ? "bg-slate-950/40 border-white/10 text-white placeholder-slate-600 focus:border-blue-500/50"
+                        : "bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-500"
+                    }`}
+                  />
+                  <button
+                    type="submit"
+                    className="w-full rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold px-4 py-2.5 transition-all shadow-md shadow-purple-600/10 cursor-pointer"
+                  >
+                    {editingCharacterId ? "Cập nhật nhân vật" : "Lưu nhân vật"}
+                  </button>
+                </form>
+              </div>
+
               <div className={`rounded-xl border p-3 ${isDark ? "border-white/10 bg-slate-950/40" : "border-slate-200 bg-slate-50"}`}>
                 <p className="text-[11px] font-semibold text-[#cdd0d5] mb-2">Model ảnh free gợi ý (Hugging Face)</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -353,9 +516,19 @@ export default function WorkspaceModals({
                 <h3 className="font-semibold text-lg text-white">Cấu hình Vũ trụ & Nhân vật</h3>
                 <p className="text-xs text-slate-400">Thiết lập thế giới lore và ngoại hình nhân vật nhất quán</p>
               </div>
-              <button onClick={() => setIsCanonModalOpen(false)} className="text-[#8c8f99] hover:text-white transition-colors cursor-pointer">
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onAutoDiscoverCanon}
+                  className="text-[11px] px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/10 hover:bg-emerald-500/15 transition-colors cursor-pointer"
+                  title="Quét nội dung đã sinh để tự thêm nhân vật và địa điểm AI tạo ra vào canon"
+                >
+                  Quét AI
+                </button>
+                <button onClick={() => setIsCanonModalOpen(false)} className="text-[#8c8f99] hover:text-white transition-colors cursor-pointer">
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             <div className="flex border-b border-white/5 px-6">
@@ -474,7 +647,14 @@ export default function WorkspaceModals({
                               }`}
                             >
                               <div>
-                                <p className="text-sm font-semibold text-white">{c.display_name}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-semibold text-white">{c.display_name}</p>
+                                  {c.auto_discovered && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/10">
+                                      AI phát hiện
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-[11px] text-slate-500 font-mono">slug: {c.slug}</p>
                               </div>
                               <button

@@ -6,6 +6,7 @@ export type ProjectCreateRequest = {
   minWords?: number;
   maxWords?: number;
   voice?: string;
+  personaContext?: string;
 };
 
 export type ProjectContinueRequest = {
@@ -15,6 +16,7 @@ export type ProjectContinueRequest = {
   minWords?: number;
   maxWords?: number;
   voice?: string;
+  personaContext?: string;
 };
 
 export type ChangePasswordRequest = {
@@ -49,6 +51,7 @@ export function toProjectCreateApiPayload(request: ProjectCreateRequest) {
     max_words: request.maxWords,
   };
   if (request.voice) payload.voice = request.voice;
+  if (request.personaContext) payload.persona_context = request.personaContext;
   return payload;
 }
 
@@ -61,6 +64,7 @@ export function toProjectContinueApiPayload(request: ProjectContinueRequest) {
     max_words: request.maxWords,
   };
   if (request.voice) payload.voice = request.voice;
+  if (request.personaContext) payload.persona_context = request.personaContext;
   return payload;
 }
 

@@ -14,7 +14,7 @@ from auth import get_current_user
 from database import get_db
 import models
 from retrieval.service import ensure_canon_scope, get_scope_for_project, reindex_project_prose
-from routers.projects import _project_uuid  # reuse UUID helper
+from routers.projects import _auto_discover_canon_entities, _project_uuid  # reuse UUID helper
 from services import canon_queries as cq
 
 
@@ -251,6 +251,18 @@ def upsert_visual_bible(
     return {"ok": True}
 
 
+@router.post("/auto-discover")
+def auto_discover_from_project_content(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    pid = _project_uuid(project_id)
+    project = _ensure_owner(db, pid, current_user.id)
+    result = _auto_discover_canon_entities(db, pid, str(project.content or ""))
+    return result
+
+
 @router.post("/reindex")
 def reindex(
     project_id: str,
@@ -278,9 +290,35 @@ def canon_overview(
         return {"scope": None}
     chars = cq.list_characters(db, scope.id)
     locs = cq.list_locations(db, scope.id)
+
+    character_items = []
+    for c in chars:
+        item = {
+            "slug": c.slug,
+            "display_name": c.display_name,
+            "id": str(c.id),
+            "auto_discovered": bool((c.personality_json or {}).get("auto_discovered")) if isinstance(c.personality_json, dict) else False,
+        }
+        variant = cq.latest_visual_variant(db, c.id)
+        if variant:
+            item["visual_variant_label"] = variant.label
+            item["outfit_summary"] = variant.outfit_summary
+            item["face_marks_json"] = variant.face_marks_json or []
+        character_items.append(item)
+
+    location_items = [
+        {
+            "id": str(L.id),
+            "slug": L.slug,
+            "display_name": L.display_name,
+            "env_style_tags": L.env_style_tags or [],
+        }
+        for L in locs
+    ]
+
     return {
         "scope_id": str(scope.id),
-        "characters": [{"slug": c.slug, "display_name": c.display_name, "id": str(c.id)} for c in chars],
-        "locations": [{"slug": L.slug, "display_name": L.display_name} for L in locs],
+        "characters": character_items,
+        "locations": location_items,
         "chunk_count": db.query(lore_models.LoreChunk).filter(lore_models.LoreChunk.scope_id == scope.id).count(),
     }
