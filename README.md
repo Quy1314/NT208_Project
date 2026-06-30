@@ -43,5 +43,6 @@ Hệ thống được phát triển dựa trên mô hình Client - Server hiện
 3. **Đa dạng hóa nội dung (Multimodal Text):** Hỗ trợ linh hoạt nhiều loại hình format nội dung ngay trong cùng một nền tảng thống nhất.
 4. **Cơ sở dữ liệu linh hoạt:** Thiết kế schema có tính tổ chức cao, sẵn sàng cho việc mở rộng thêm tính năng (như chia sẻ, làm việc nhóm) trong các giai đoạn sau.
 
+## [Video demo](./demo.mp4)
 
 Câu thần chú: Chúng em đã biết làm web và hiểu hệ thống web hoạt động như thế nào.
