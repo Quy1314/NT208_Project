@@ -46,6 +46,7 @@ Hệ thống được phát triển dựa trên mô hình Client - Server hiện
 ## [Video demo](./demo.mp4)
 
 Câu thần chú: **Chúng em đã biết làm web và hiểu hệ thống web hoạt động như thế nào.**
+
 Tỉ lệ đóng góp: 
 - Huỳnh Nhật Duy - 24520375: 25%: Module tạo âm thanh.
 - Nguyễn Hoàng Quý - 24521494: 25%: Module tạo ảnh, xây dựng giao diện frontend, deploy.
