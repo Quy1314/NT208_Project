@@ -15,6 +15,30 @@ from services.tts import DEFAULT_VOICE
 
 router = APIRouter(prefix="/api/audio", tags=["Audio"])
 
+PRESET_VOICES = frozenset({
+    "Bình An", "Ngọc Linh", "Trúc Ly", "Mỹ Duyên",
+    "Xuân Vĩnh", "Thái Sơn", "Gia Bảo", "Đức Trí",
+    "Trọng Hữu", "Ngọc Lan",
+})
+
+
+def _resolve_voice(db: Session, user_id: UUID, voice_name: str) -> tuple[str, str | None]:
+    """Trả về (voice_name, ref_audio_url). Nếu voice là preset -> (voice_name, None). Nếu là custom -> ("Bình An", signed_url)."""
+    if voice_name in PRESET_VOICES:
+        return voice_name, None
+    profile = (
+        db.query(models.VoiceProfile)
+        .filter(models.VoiceProfile.user_id == user_id, models.VoiceProfile.name == voice_name)
+        .first()
+    )
+    if profile:
+        ref = profile.sample_url
+        if ref and ref.startswith("private://"):
+            bucket, fname = ref[10:].split("/", 1)
+            ref = get_signed_url(bucket, fname) or ref
+        return DEFAULT_VOICE, ref
+    return DEFAULT_VOICE, None
+
 
 def _build_public_audio_url(audio_id: UUID) -> str:
     return f"/api/audio/file/{audio_id}"
@@ -38,10 +62,14 @@ async def create_audio_job(
     if not prompt:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Prompt không được để trống.")
 
+    resolved_voice, resolved_ref = _resolve_voice(db, current_user.id, data.voice)
+
     job = models.AudioJob(
         user_id=current_user.id,
         prompt=prompt,
         language=data.language,
+        voice=resolved_voice,
+        ref_audio_url=data.ref_audio_url or resolved_ref,
         status="queued",
     )
     db.add(job)

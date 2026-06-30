@@ -131,6 +131,8 @@ class AudioJob(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     prompt = Column(Text, nullable=False)
     language = Column(String(20), nullable=False, server_default="vietnamese")
+    voice = Column(String(120), nullable=True, default=None)
+    ref_audio_url = Column(Text, nullable=True)
     status = Column(String(20), nullable=False, server_default="queued", index=True)
     result_path = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
@@ -264,6 +266,8 @@ class AudioResponse(BaseModel):
 class AudioJobCreateReq(BaseModel):
     prompt: str
     language: Literal["vietnamese", "english"] = "vietnamese"
+    voice: str = "Bình An"
+    ref_audio_url: str | None = None
 
 
 class AudioJobCreateResp(BaseModel):

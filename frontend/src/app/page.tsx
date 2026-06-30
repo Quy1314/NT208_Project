@@ -96,24 +96,42 @@ function buildProjectRequestHeaders(token: string | null): Record<string, string
   return headers;
 }
 
-const VIENEU_SERVICE_URL = "https://kiwi-1106-vienue-tts.hf.space";
+async function generateAudioJobAndWait(text: string, voice: string): Promise<string | null> {
+  const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
+  if (!token) throw new Error("Vui lòng đăng nhập.");
 
-async function generateAudioDirect(text: string, voice: string): Promise<string> {
-  const params = new URLSearchParams({ text, voice });
-  const res = await fetch(`${VIENEU_SERVICE_URL}/generate?${params}`, { method: "POST" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { detail?: string }).detail || `TTS service HTTP ${res.status}`);
+  const createRes = await fetch(`${API_BASE_URL}/api/audio/jobs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ prompt: text, language: "vietnamese", voice }),
+  });
+  if (!createRes.ok) {
+    const err = await createRes.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || `Audio job creation failed HTTP ${createRes.status}`);
   }
-  const data = await res.json();
-  if (!data.audio_b64) throw new Error("TTS service returned no audio");
-  return data.audio_b64 as string;
+  const { job_id } = await createRes.json();
+
+  for (let i = 0; i < 120; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const statusRes = await fetch(`${API_BASE_URL}/api/audio/jobs/${job_id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!statusRes.ok) throw new Error("Failed to check audio job status");
+    const job = await statusRes.json();
+    if (job.status === "done") {
+      return job.audio_url as string | null;
+    }
+    if (job.status === "failed") {
+      throw new Error(job.error || "Audio generation failed");
+    }
+  }
+  throw new Error("Audio job timed out after 4 minutes");
 }
 
-async function attachAudioToProject(projectId: string, audioB64: string): Promise<void> {
+async function attachAudioUrlToProject(projectId: string, audioUrl: string): Promise<void> {
   const token = localStorage.getItem("access_token") || sessionStorage.getItem("access_token");
   const formData = new FormData();
-  formData.append("audio_b64", audioB64);
+  formData.append("audio_url", audioUrl);
   const res = await fetch(`${API_BASE_URL}/api/projects/${projectId}/attach-audio`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
@@ -1136,11 +1154,13 @@ export default function DashboardPage() {
             const textForTTS = promptText;
             (async () => {
               try {
-                const audioB64 = await generateAudioDirect(textForTTS, selectedVoice);
-                await attachAudioToProject(data.id, audioB64);
-                fetchProjects();
+                const audioUrl = await generateAudioJobAndWait(textForTTS, selectedVoice);
+                if (audioUrl) {
+                  await attachAudioUrlToProject(data.id, audioUrl);
+                  fetchProjects();
+                }
               } catch (ttsErr) {
-                console.error("TTS direct call failed:", ttsErr);
+                console.error("TTS async job failed:", ttsErr);
                 alert("Tạo audio thất bại: " + (ttsErr instanceof Error ? ttsErr.message : String(ttsErr)));
               }
             })();
@@ -1285,11 +1305,13 @@ export default function DashboardPage() {
           if (isAudioModel) {
             (async () => {
               try {
-                const audioB64 = await generateAudioDirect(promptText, selectedVoice);
-                await attachAudioToProject(data.id, audioB64);
-                fetchProjects();
+                const audioUrl = await generateAudioJobAndWait(promptText, selectedVoice);
+                if (audioUrl) {
+                  await attachAudioUrlToProject(data.id, audioUrl);
+                  fetchProjects();
+                }
               } catch (ttsErr) {
-                console.error("TTS direct call (continue) failed:", ttsErr);
+                console.error("TTS async job (continue) failed:", ttsErr);
                 alert("Tạo audio thất bại: " + (ttsErr instanceof Error ? ttsErr.message : String(ttsErr)));
               }
             })();

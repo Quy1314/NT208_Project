@@ -31,10 +31,13 @@ async def process_audio_job_async(ctx, job_id_str: str, fpt_api_key: str | None 
             raise RuntimeError("Planner/Executor returned empty script.")
 
         print(f"[WORKER] Generating TTS audio via VieNeu service (length={len(script)})")
+        voice = getattr(job, "voice", None) or DEFAULT_VOICE
+        ref_audio_url = getattr(job, "ref_audio_url", None)
         audio_bytes, ext = generate_tts_audio(
             text=script,
-            voice=DEFAULT_VOICE,
-            timeout_seconds=180.0,
+            voice=voice,
+            ref_audio_url=ref_audio_url,
+            timeout_seconds=300.0,
         )
         if not audio_bytes:
             raise RuntimeError("TTS returned empty audio.")

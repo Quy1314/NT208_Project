@@ -1267,7 +1267,8 @@ def continue_project(
 @router.post("/{project_id}/attach-audio")
 async def attach_audio(
     project_id: str,
-    audio_b64: str = Form(..., description="Base64-encoded WAV audio"),
+    audio_b64: str = Form(None, description="Base64-encoded WAV audio"),
+    audio_url: str = Form(None, description="URL to existing audio file (from async job)"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -1278,19 +1279,25 @@ async def attach_audio(
     if getattr(project, "user_id", None) != getattr(current_user, "id", None):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Bạn không có quyền truy cập Project này.")
 
-    try:
-        audio_bytes = base64.b64decode(audio_b64)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Dữ liệu audio_b64 không hợp lệ.")
+    if audio_url:
+        audio_web_path = audio_url
+    elif audio_b64:
+        try:
+            audio_bytes = base64.b64decode(audio_b64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Dữ liệu audio_b64 không hợp lệ.")
 
-    audio_bytes = _ensure_wav_header(audio_bytes)
-    stored_bytes, ext = to_mp3_if_possible(audio_bytes)
-    audio_filename = f"audio_{pid}_{int(time.time() * 1000)}.{ext}"
-    upload_dir = get_audio_upload_dir()
-    os.makedirs(upload_dir, exist_ok=True)
-    audio_path = os.path.join(upload_dir, audio_filename)
-    with open(audio_path, "wb") as f:
-        f.write(stored_bytes)
+        audio_bytes = _ensure_wav_header(audio_bytes)
+        stored_bytes, ext = to_mp3_if_possible(audio_bytes)
+        audio_filename = f"audio_{pid}_{int(time.time() * 1000)}.{ext}"
+        upload_dir = get_audio_upload_dir()
+        os.makedirs(upload_dir, exist_ok=True)
+        audio_path = os.path.join(upload_dir, audio_filename)
+        with open(audio_path, "wb") as f:
+            f.write(stored_bytes)
+        audio_web_path = f"/uploads/audio/{audio_filename}"
+    else:
+        raise HTTPException(status_code=400, detail="Cần audio_b64 hoặc audio_url.")
 
     audio_web_path = f"/uploads/audio/{audio_filename}"
     project_obj = cast(Any, project)
